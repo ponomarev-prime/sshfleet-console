@@ -48,8 +48,7 @@ type Model struct {
 	selected               int
 	filter                 string
 	filtering              bool
-	searchReturnSourceName string
-	searchReturnGroupName  string
+	searchReturnNavigation navigationRef
 	searchReturnHostID     string
 	searchReturnSet        bool
 	message                string
@@ -89,6 +88,7 @@ type Model struct {
 	editorHealth           toolcheck.Result
 	healthVisible          bool
 	groups                 []string
+	views                  []fleetView
 	groupDefinitions       []config.HostGroup
 	groupsDir              string
 	groupEditor            string
@@ -273,6 +273,7 @@ func New(hosts []inventory.Host, sources []inventory.SourceSummary, client opens
 		hostKeyBackup:   make(map[string]string),
 		hostKeyPrompt:   make(map[string]bool),
 		groupResults:    make(map[string]groupCommandResult),
+		views:           defaultFleetViews(),
 	}
 	for _, option := range options {
 		option(&m)
@@ -394,10 +395,7 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		selectedID := ""
-		selectedSource := ""
-		if m.source > 0 && m.source-1 < len(m.sources) {
-			selectedSource = m.sources[m.source-1].Name
-		}
+		selectedNavigation := m.selectedNavigation()
 		if index := m.selectedHostIndex(); index >= 0 && index < len(m.hosts) {
 			selectedID = m.hosts[index].ID
 		}
@@ -467,13 +465,7 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				break
 			}
 		}
-		m.source = 0
-		for i, source := range m.sources {
-			if source.Name == selectedSource {
-				m.source = i + 1
-				break
-			}
-		}
+		m.restoreNavigation(selectedNavigation)
 		m.selected = 0
 		for position, index := range m.visibleIndices() {
 			if m.hosts[index].ID == selectedID {
@@ -859,7 +851,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	case "j", "down":
 		if m.focus == focusSources {
-			if m.source < len(m.sources)+len(m.groups) {
+			if m.source < m.lastNavigationIndex() {
 				m.source++
 				m.selected = 0
 			}
@@ -889,7 +881,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, m.resolveSelectedCmd()
 	case "G", "end":
 		if m.focus == focusSources {
-			m.source = len(m.sources) + len(m.groups)
+			m.source = m.lastNavigationIndex()
 			m.selected = 0
 			return m, m.resolveSelectedCmd()
 		}
@@ -1179,6 +1171,7 @@ func (m Model) visibleIndices() []int {
 		sourceName = m.sources[m.source-1].Name
 	}
 	groupName := m.selectedGroup()
+	view, viewSelected := m.selectedView()
 	visible := make([]int, 0, len(m.hosts))
 	for i, host := range m.hosts {
 		if query == "" {
@@ -1186,6 +1179,9 @@ func (m Model) visibleIndices() []int {
 				continue
 			}
 			if groupName != "" && !contains(host.Groups, groupName) {
+				continue
+			}
+			if viewSelected && !view.match(m, host) {
 				continue
 			}
 			visible = append(visible, i)
@@ -1200,11 +1196,7 @@ func (m Model) visibleIndices() []int {
 
 func (m *Model) beginGlobalSearch() {
 	if !m.searchReturnSet && strings.TrimSpace(m.filter) == "" {
-		if m.source > 0 && m.source <= len(m.sources) {
-			m.searchReturnSourceName = m.sources[m.source-1].Name
-		} else {
-			m.searchReturnGroupName = m.selectedGroup()
-		}
+		m.searchReturnNavigation = m.selectedNavigation()
 		visible := m.visibleIndices()
 		if len(visible) > 0 {
 			m.searchReturnHostID = m.hosts[visible[min(m.selected, len(visible)-1)]].ID
@@ -1224,22 +1216,7 @@ func (m *Model) restoreSearchContext() {
 		m.selected = 0
 		return
 	}
-	m.source = 0
-	if m.searchReturnSourceName != "" {
-		for index, source := range m.sources {
-			if source.Name == m.searchReturnSourceName {
-				m.source = index + 1
-				break
-			}
-		}
-	} else if m.searchReturnGroupName != "" {
-		for index, group := range m.groups {
-			if group == m.searchReturnGroupName {
-				m.source = len(m.sources) + index + 1
-				break
-			}
-		}
-	}
+	m.restoreNavigation(m.searchReturnNavigation)
 	m.selected = 0
 	if m.searchReturnHostID != "" {
 		for position, index := range m.visibleIndices() {
@@ -1249,8 +1226,7 @@ func (m *Model) restoreSearchContext() {
 			}
 		}
 	}
-	m.searchReturnSourceName = ""
-	m.searchReturnGroupName = ""
+	m.searchReturnNavigation = navigationRef{}
 	m.searchReturnHostID = ""
 	m.searchReturnSet = false
 }

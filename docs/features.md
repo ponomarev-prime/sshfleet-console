@@ -20,6 +20,7 @@ test обновляются в том же commit.
 | Remote executable `ssh_config` | намеренно запрещено | negative source tests |
 | Per-host private overlays | реализовано, base untouched | model + PTY edit/reload |
 | Cross-source groups + private `groups.d` keyboard CRUD | реализовано | storage/model + real PTY screenshots |
+| Built-in read-only Views: Offline/Errors/high CPU/low MEM/Stale | реализовано | model predicates + real PTY traversal/screenshots |
 
 ## Platform foundation и local terminal
 
@@ -59,7 +60,9 @@ script через `sh -s`. Password AskPass включается только д
 ## Навигация и rendering
 
 - Responsive flat `lf`-style Sources/Hosts/Preview layout.
-- `All available` первым; ниже source rows и отдельная секция `GROUPS`.
+- `All available` первым; ниже отдельные секции `SOURCES`, `GROUPS`, `VIEWS`.
+- Views вычисляются из последнего probe/source state: `Offline`, `Errors`,
+  `CPU ≥ 80%`, `MEM ≤ 20%`, `Stale`; они не меняют source/group membership.
 - `n` create, host `m` или Enter → `Manage group membership`, group `R` rename,
   `D` delete, `e` edit;
   fragments atomic mode-0600, source configs остаются read-only.
@@ -161,7 +164,7 @@ Shell fixtures запускаются в отдельной process session бе
    parsing, sanitization, scheduler, host-key atomicity, buildinfo.
 2. **Bubble Tea model/render:** реальные KeyMsg проходят `Update`; semantic View
    проверяется после ANSI stripping.
-3. **PTY E2E:** собранный binary получает реальные клавиши; проверяются global search,
+3. **PTY E2E:** собранный binary получает реальные клавиши; проверяются Views, global search,
    editor suspend/restore, every Enter menu row, две параллельные terminal tabs,
    switch/live-close confirmation, embedded VT, exit и screenshots.
 4. **Crypto/network integration:** disposable age/SSHSIG keys и local TLS bearer

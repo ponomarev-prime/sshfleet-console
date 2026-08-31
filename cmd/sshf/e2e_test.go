@@ -441,7 +441,7 @@ printf '%s\n' \
   'cpu_idle=900' \
   'cpu_count=8' \
   'mem_total_kb=33554432' \
-  'mem_available_kb=16777216' \
+	  'mem_available_kb=16777216' \
   'swap_total_kb=8388608' \
   'swap_available_kb=4194304' \
   'root_total_kb=67108864' \
@@ -533,6 +533,23 @@ max_concurrent = 2
 			} else {
 				h.assertHeaderAt("HOSTS", 20)
 				h.assertHeaderAt("PREVIEW", 115)
+			}
+
+			// Built-in Views are part of the same real left-pane traversal. This
+			// shared public-screenshot fixture intentionally keeps ordinary host
+			// metrics; threshold filtering has a dedicated private E2E below.
+			h.send("hG")
+			h.waitForScreen("VIEWS", 3*time.Second)
+			h.waitForScreen("Stale", 3*time.Second)
+			if size.name == "wide" {
+				h.waitForScreen("Targets retained", 3*time.Second)
+			}
+			h.screenshot(size.name + "-views-stale-empty")
+			h.send("gl")
+			if size.name == "wide" {
+				h.waitForScreen("All available", 3*time.Second)
+			} else {
+				h.waitForScreen("alpha", 3*time.Second)
 			}
 
 			h.send("?")
@@ -655,6 +672,97 @@ max_concurrent = 2
 	}
 }
 
+func TestTUIEndToEndComputedViews(t *testing.T) {
+	dir := t.TempDir()
+	fakeSSH := filepath.Join(dir, "fake-ssh")
+	sshConfig := filepath.Join(dir, "ssh_config")
+	configPath := filepath.Join(dir, "config.toml")
+	binary := filepath.Join(dir, "sshfleet")
+
+	writeExecutable(t, fakeSSH, `#!/bin/sh
+alias_name=""
+for arg do alias_name="$arg"; done
+case " $* " in
+  *" -G "*)
+    printf 'hostname %s.example\nuser root\nport 22\n' "$alias_name"
+    exit 0
+    ;;
+esac
+mem_available=6291456
+case " $* " in
+  *" low-memory "*) mem_available=524288 ;;
+esac
+printf '%s\n' \
+  'cpu_total=1200' \
+  'cpu_idle=900' \
+  'cpu_count=4' \
+  'mem_total_kb=8388608' \
+  "mem_available_kb=$mem_available" \
+  'swap_total_kb=2097152' \
+  'swap_available_kb=1048576' \
+  'root_total_kb=16777216' \
+  'root_available_kb=8388608' \
+  'load=0.10 0.20 0.30' \
+  'uptime_seconds=3600' \
+  'process=42|S|fixture|1.5' \
+  'os_name=Fixture Linux' \
+  'kernel=Linux 6.12.0' \
+  'architecture=x86_64'
+`)
+	writeFile(t, sshConfig, `Host calm low-memory
+    HostName %h.example
+    User root
+`, 0o600)
+	writeFile(t, configPath, fmt.Sprintf(`version = 1
+
+[app]
+refresh_interval = "1h"
+connect_timeout = "1s"
+max_concurrent = 2
+ssh_binary = %q
+
+[app.containers]
+enabled = false
+
+[[sources]]
+name = "fixture"
+kind = "ssh_config"
+path = %q
+`, fakeSSH, sshConfig), 0o600)
+
+	binary = resolveE2EBinary(t, dir)
+	command := exec.Command(binary,
+		"--config", configPath,
+		"--no-user-ssh-config",
+		"--groups-dir", filepath.Join(dir, "groups.d"),
+		"--overrides-dir", filepath.Join(dir, "hosts.d"),
+	)
+	command.Env = append(os.Environ(), "TERM=xterm-256color")
+	terminal, err := pty.StartWithSize(command, &pty.Winsize{Rows: 30, Cols: 140})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := newPTYHarness(t, command, terminal, 140, 30)
+	defer h.close()
+
+	h.waitForScreen("low-memory", 8*time.Second)
+	h.waitForScreen("updated now", 8*time.Second)
+	h.send("hGk\r") // Stale → MEM ≤ 20% → HOSTS.
+	h.waitForScreen("MEM ≤ 20%", 3*time.Second)
+	h.waitForScreen("low-memory", 3*time.Second)
+	h.waitForScreenGone("● calm", 3*time.Second)
+	h.screenshot("views-low-memory-filtered")
+
+	h.send("hG")
+	h.waitForScreen("Stale", 3*time.Second)
+	h.waitForScreen("No hosts in this view", 3*time.Second)
+	h.screenshot("views-stale-empty")
+	h.send("q")
+	if err := h.wait(5 * time.Second); err != nil {
+		t.Fatalf("sshfleet did not exit after Views traversal: %v\n%s", err, h.tail(4000))
+	}
+}
+
 func TestTUIEndToEndGroupsCRUDAndMembership(t *testing.T) {
 	dir := t.TempDir()
 	sshConfig := filepath.Join(dir, "ssh_config")
@@ -746,7 +854,7 @@ path = %q
 	h.waitForScreen("demo-02 added", 3*time.Second)
 
 	// Select the group, verify both members, then rename and delete it.
-	h.send("hG")
+	h.send("hjj")
 	h.waitForScreen("demo-stands", 3*time.Second)
 	h.screenshot("groups-two-members")
 	h.send("R")

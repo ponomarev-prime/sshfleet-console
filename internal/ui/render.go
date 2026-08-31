@@ -215,7 +215,7 @@ func (m Model) renderSources(width, height int) string {
 		selection int
 		text      string
 	}
-	renderItem := func(position int, entry item, group bool) string {
+	renderItem := func(position int, entry item, kind navigationKind) string {
 		icon := lipgloss.NewStyle().Foreground(colorGreen).Render("●")
 		count := fmt.Sprintf("%d", entry.count)
 		if position == 0 {
@@ -242,10 +242,16 @@ func (m Model) renderSources(width, height int) string {
 			icon = lipgloss.NewStyle().Foreground(colorRed).Render("●")
 			count = "error"
 		}
-		if group {
+		if kind == navigationGroup {
 			icon = lipgloss.NewStyle().Foreground(colorPurple).Render("◇")
 			if entry.count == 0 {
 				icon = mutedStyle.Render("◇")
+			}
+		}
+		if kind == navigationView {
+			icon = lipgloss.NewStyle().Foreground(colorBlue).Render("◈")
+			if entry.count == 0 {
+				icon = mutedStyle.Render("◈")
 			}
 		}
 		nameWidth := max(1, width-ansi.StringWidth(icon)-ansi.StringWidth(count)-3)
@@ -262,7 +268,7 @@ func (m Model) renderSources(width, height int) string {
 	}
 	rows := make([]row, 0, len(items)+len(m.groups)+2)
 	for position, entry := range items {
-		rows = append(rows, row{selection: position, text: renderItem(position, entry, false)})
+		rows = append(rows, row{selection: position, text: renderItem(position, entry, navigationSource)})
 	}
 	groupHeader := titleStyle.Render(" GROUPS ")
 	groupHeader += titleStyle.Render(strings.Repeat("─", max(0, width-ansi.StringWidth(groupHeader))))
@@ -275,10 +281,17 @@ func (m Model) renderSources(width, height int) string {
 			}
 		}
 		position := len(items) + index
-		rows = append(rows, row{selection: position, text: renderItem(position, item{name: group, count: count}, true)})
+		rows = append(rows, row{selection: position, text: renderItem(position, item{name: group, count: count}, navigationGroup)})
 	}
 	if len(m.groups) == 0 {
 		rows = append(rows, row{selection: -1, text: mutedStyle.Render(truncate("  n create group", width))})
+	}
+	viewHeader := titleStyle.Render(" VIEWS ")
+	viewHeader += titleStyle.Render(strings.Repeat("─", max(0, width-ansi.StringWidth(viewHeader))))
+	rows = append(rows, row{selection: -1, text: viewHeader})
+	for index, view := range m.views {
+		position := len(items) + len(m.groups) + index
+		rows = append(rows, row{selection: position, text: renderItem(position, item{name: view.name, count: m.viewCount(view)}, navigationView)})
 	}
 	selectedRow := 0
 	for index, candidate := range rows {
@@ -304,6 +317,9 @@ func (m Model) renderHosts(width, height int) string {
 	if len(visible) == 0 {
 		if m.filter != "" {
 			return mutedStyle.Render(truncate("No hosts match global search /"+m.filter, width))
+		}
+		if _, ok := m.selectedView(); ok {
+			return mutedStyle.Render("No hosts in this view")
 		}
 		return mutedStyle.Render("No hosts in this source")
 	}
@@ -485,6 +501,11 @@ func (m Model) renderPreview(width, height int) string {
 		}
 		if group := m.selectedGroup(); group != "" {
 			return m.renderGroupPreview(group, width, height)
+		}
+		if view, ok := m.selectedView(); ok {
+			return titleStyle.Render(truncate(view.name, width)) + "\n" +
+				mutedStyle.Render(fmt.Sprintf("hosts: %d", m.viewCount(view))) + "\n\n" +
+				mutedStyle.Render(truncate(view.description, width))
 		}
 		return mutedStyle.Render("Select a host")
 	}
@@ -968,6 +989,8 @@ func (m Model) renderFooter(width int) string {
 	}
 	if m.selectedGroup() != "" && !m.groupCommandMenu && !m.filtering && m.groupDialog.mode == groupDialogNone {
 		left = " GROUP " + m.selectedGroup() + "  x command  R rename  D delete  e edit  Enter hosts "
+	} else if view, ok := m.selectedView(); ok && !m.filtering && m.groupDialog.mode == groupDialogNone {
+		left = " VIEW " + view.name + "  Enter hosts  / search  r refresh  q quit "
 	} else if m.focus == focusSources && m.groupDialog.mode == groupDialogNone {
 		left = " SOURCES  j/k move  n new group  Enter hosts  ? health  q quit "
 	}

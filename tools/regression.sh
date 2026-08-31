@@ -62,10 +62,10 @@ run_step coverage go test -timeout=2m -coverprofile="$artifact_dir/coverage.out"
 if [ -f "$artifact_dir/coverage.out" ]; then
     run_step coverage-summary go tool cover -func="$artifact_dir/coverage.out"
 fi
-run_step menu go test -timeout=2m -v ./internal/ui -run 'TestHostActionMenu|TestGroup|TestTerminalTab' -count=1
+run_step menu go test -timeout=2m -v ./internal/ui -run 'TestHostActionMenu|TestGroup|TestTerminalTab|TestBuiltInView|TestView' -count=1
 run_step sources go test -timeout=2m -v ./internal/sourcebundle ./internal/inventory ./internal/config -count=1
 run_step pty-e2e go test -timeout=2m -v ./cmd/sshf -run TestTUIEndToEndProbeFilterOverlayGitAndQuit -count=1
-run_step pty-screenshots env SSHF_SCREENSHOT_DIR="$artifact_dir/tui-screenshots" go test -timeout=2m -v ./cmd/sshf -run 'TestTUIEndToEnd(ScreenshotsAndActionMenuTraversal|GroupsCRUDAndMembership|LocalContainerMenuPreviewAndLogs|TrustedLocalConfigMenuAndPreview|GlobalHostSearchAcrossSources)' -count=1
+run_step pty-screenshots env SSHF_SCREENSHOT_DIR="$artifact_dir/tui-screenshots" go test -timeout=2m -v ./cmd/sshf -run 'TestTUIEndToEnd(ScreenshotsAndActionMenuTraversal|ComputedViews|GroupsCRUDAndMembership|LocalContainerMenuPreviewAndLogs|TrustedLocalConfigMenuAndPreview|GlobalHostSearchAcrossSources)' -count=1
 run_step editor-pty env SSHF_SCREENSHOT_DIR="$artifact_dir/tui-screenshots" go test -timeout=2m -v ./cmd/sshf -run TestTUIRealNeovimReceivesArrowKeys -count=1
 run_step install-full "$repo_root/tools/test-install-full.sh"
 run_step toolchain "$repo_root/tools/check.sh"

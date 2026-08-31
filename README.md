@@ -1,6 +1,6 @@
 # SSH Fleet Console
 
-`sshfleet` — быстрая локальная TUI-консоль для SSH-флота: источники и группы слева,
+`sshfleet` — быстрая локальная TUI-консоль для SSH-флота: источники, группы и Views слева,
 главная таблица узлов по центру, объяснимый Preview справа.
 
 Она читает привычный OpenSSH config, параллельно и безопасно опрашивает Linux
@@ -22,6 +22,9 @@
  shared           top: postgres[1842] · 3s ago                  HOST STATUS · REMOTE
  GROUPS         ○ git.example  Git access                       SSH SOFTWARE · REMOTE
  production
+ VIEWS          ● busy-node    CPU% ████████████ 91%            HOST STATUS · REMOTE
+ Errors
+ MEM ≤ 20%
                                                                 SYSTEM · REMOTE
 ```
 
@@ -58,6 +61,9 @@
 - **Глобальный поиск по fleet.** `/` находит host за пределами выбранного Source
   или Group по alias/name, target, user/port, source, tags, groups и container
   metadata; составной запрос вроде `perf 202` требует совпадения всех слов.
+- **Вычисляемые Views.** `Offline`, `Errors`, `CPU ≥ 80%`, `MEM ≤ 20%` и
+  `Stale` мгновенно отбирают узлы по последнему probe/source state, ничего не
+  записывая в inventories или groups.
 - **Несколько уровней источников.** Встроенный `~/.ssh/config`, дополнительные
   доверенные OpenSSH configs, строгий TOML inventory, локальные и удалённые
   подписанные age-bundles.
@@ -157,7 +163,7 @@ tools.
 | `g/G`, `Home/End` | перейти в начало/конец |
 | `/` | глобальный живой поиск host по всему fleet |
 | `Esc` после поиска | закрыть ввод; повторное нажатие очищает поиск и возвращает прежний Source/Host |
-| `Enter` | применить source или открыть контекстное меню host |
+| `Enter` | применить source/group/view или открыть контекстное меню host |
 | `n` в Sources | создать private group |
 | `m` на Host | добавить/убрать host из группы |
 | `R`, `D`, `e` на Group | переименовать, удалить или открыть fragment в редакторе |
@@ -200,7 +206,7 @@ endpoint — безопасный `ssh -T` access check. Для changed host key
 
 | Область | Возможности |
 |---|---|
-| Inventory | OpenSSH aliases/Includes, strict TOML, host overlays, keyboard-managed cross-source groups |
+| Inventory | OpenSSH aliases/Includes, strict TOML, host overlays, cross-source groups, read-only computed Views |
 | Sources | local OpenSSH, restricted TOML, signed+age local bundle, authenticated HTTPS remote bundle |
 | Observability | bounded concurrent Linux probe, capacity, utilization bars, SSH/system/container metadata |
 | Sessions | постоянная Fleet + независимые SSH/local/container PTY tabs, embedded Preview PTY/VT, bounded sanitized tail |

@@ -119,7 +119,8 @@ func TestUserGuideTracksInteractiveContract(t *testing.T) {
 	root := repositoryRoot(t)
 	body := readFile(t, filepath.Join(root, "docs", "user-guide.md"))
 	required := []string{
-		"SOURCES", "HOSTS", "PREVIEW", "All available", "Enter", "Shift+K",
+		"SOURCES", "GROUPS", "VIEWS", "HOSTS", "PREVIEW", "All available", "Enter", "Shift+K",
+		"Offline", "Errors", "CPU ≥ 80%", "MEM ≤ 20%", "Stale",
 		"Open terminal tab", "Open terminal in Preview", "Open SSH Fleet workspace",
 		"nvim → vim → nano", "50 строк", "Git endpoint", "Host overlay",
 		"Groups", "groups.d", "Group membership", "Manage group membership", "source:alias",

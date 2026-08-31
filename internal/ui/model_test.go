@@ -1492,7 +1492,7 @@ func TestKeyboardNavigationAndFiltering(t *testing.T) {
 		t.Fatalf("source = %d, want 1", m.source)
 	}
 	m = updateWithKey(t, m, tea.Key{Code: tea.KeyEnd})
-	if m.source != 2 {
+	if m.source != m.lastNavigationIndex() {
 		t.Fatalf("source = %d, want last", m.source)
 	}
 	m = updateWithKey(t, m, tea.Key{Code: tea.KeyHome})

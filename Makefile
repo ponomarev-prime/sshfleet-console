@@ -50,7 +50,7 @@ test-e2e:
 test-screenshots:
 	rm -rf .artifacts/tui-screenshots
 	mkdir -p .artifacts/tui-screenshots
-	SSHF_SCREENSHOT_DIR="$(CURDIR)/.artifacts/tui-screenshots" go test -v ./cmd/sshf -run 'TestTUIEndToEnd(ScreenshotsAndActionMenuTraversal|GroupsCRUDAndMembership|LocalContainerMenuPreviewAndLogs|TrustedLocalConfigMenuAndPreview|GlobalHostSearchAcrossSources)' -count=1
+	SSHF_SCREENSHOT_DIR="$(CURDIR)/.artifacts/tui-screenshots" go test -v ./cmd/sshf -run 'TestTUIEndToEnd(ScreenshotsAndActionMenuTraversal|ComputedViews|GroupsCRUDAndMembership|LocalContainerMenuPreviewAndLogs|TrustedLocalConfigMenuAndPreview|GlobalHostSearchAcrossSources)' -count=1
 
 test-public-screenshots:
 	rm -rf .artifacts/public-screenshots
@@ -69,7 +69,7 @@ test-sources:
 	go test -v ./internal/sourcebundle ./internal/inventory ./internal/config -count=1
 
 test-menu:
-	go test -v ./internal/ui -run 'TestHostActionMenu|TestGroup|TestHealthcheckOverlay|TestTerminalTab' -count=1
+	go test -v ./internal/ui -run 'TestHostActionMenu|TestGroup|TestHealthcheckOverlay|TestTerminalTab|TestBuiltInView|TestView' -count=1
 
 test-install: build
 	tools/test-install.sh

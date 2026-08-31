@@ -42,7 +42,7 @@ type groupChangedMsg struct {
 	path        string
 	selectGroup string
 	hostID      string
-	navIndex    int
+	navigation  navigationRef
 	err         error
 }
 
@@ -232,7 +232,7 @@ func (m Model) handleGroupDialogKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) groupMutationCmd(action, selectGroup, hostID string, mutate func() (string, error)) tea.Cmd {
 	reload := m.groupReload
-	navIndex := m.source
+	navigation := m.selectedNavigation()
 	return func() tea.Msg {
 		if reload == nil {
 			return groupChangedMsg{err: fmt.Errorf("group reload is unavailable")}
@@ -242,7 +242,7 @@ func (m Model) groupMutationCmd(action, selectGroup, hostID string, mutate func(
 			return groupChangedMsg{err: err}
 		}
 		hosts, sources, groups, err := reload()
-		return groupChangedMsg{hosts: hosts, sources: sources, groups: groups, action: action, path: path, selectGroup: selectGroup, hostID: hostID, navIndex: navIndex, err: err}
+		return groupChangedMsg{hosts: hosts, sources: sources, groups: groups, action: action, path: path, selectGroup: selectGroup, hostID: hostID, navigation: navigation, err: err}
 	}
 }
 
@@ -255,7 +255,7 @@ func (m Model) applyGroupChanged(msg groupChangedMsg) (tea.Model, tea.Cmd) {
 	m.hosts, m.sources = msg.hosts, msg.sources
 	m.setGroupDefinitions(msg.groups)
 	m.queue = nil
-	m.source = min(msg.navIndex, len(m.sources)+len(m.groups))
+	m.restoreNavigation(msg.navigation)
 	if msg.selectGroup != "" {
 		m.source = 0
 		for index, group := range m.groups {
@@ -309,10 +309,10 @@ func (m Model) editSelectedGroup() (tea.Model, tea.Cmd) {
 	m.polling = make(map[string]bool)
 	m.refreshAfter = m.active > 0
 	m.message = "Editing group: " + path
-	return m, editGroupFragmentCmd(cmd, path, name, m.groupReload, m.source)
+	return m, editGroupFragmentCmd(cmd, path, name, m.groupReload, m.selectedNavigation())
 }
 
-func editGroupFragmentCmd(cmd *exec.Cmd, path, name string, reload func() ([]inventory.Host, []inventory.SourceSummary, []config.HostGroup, error), navIndex int) tea.Cmd {
+func editGroupFragmentCmd(cmd *exec.Cmd, path, name string, reload func() ([]inventory.Host, []inventory.SourceSummary, []config.HostGroup, error), navigation navigationRef) tea.Cmd {
 	if reload == nil {
 		return func() tea.Msg { return groupChangedMsg{err: fmt.Errorf("group reload is unavailable")} }
 	}
@@ -321,7 +321,7 @@ func editGroupFragmentCmd(cmd *exec.Cmd, path, name string, reload func() ([]inv
 			return groupChangedMsg{err: fmt.Errorf("editor: %w", err)}
 		}
 		hosts, sources, groups, err := reload()
-		return groupChangedMsg{hosts: hosts, sources: sources, groups: groups, action: "edited", path: path, selectGroup: name, navIndex: navIndex, err: err}
+		return groupChangedMsg{hosts: hosts, sources: sources, groups: groups, action: "edited", path: path, selectGroup: name, navigation: navigation, err: err}
 	})
 }
 

@@ -52,7 +52,7 @@ func TestGroupsCRUDAndMembershipThroughKeyboard(t *testing.T) {
 	if m.selectedGroup() != "Стенды 202 203" || len(m.groups) != 1 {
 		t.Fatalf("created group = source:%d groups:%#v", m.source, m.groups)
 	}
-	if view := ansi.Strip(m.View().Content); !strings.Contains(view, "SOURCES") || !strings.Contains(view, "GROUPS") || !strings.Contains(view, "Стенды") || !strings.Contains(view, "PRIVATE GROUP") {
+	if view := ansi.Strip(m.View().Content); !strings.Contains(view, "SOURCES") || !strings.Contains(view, "GROUPS") || !strings.Contains(view, "VIEWS") || !strings.Contains(view, "Стенды") || !strings.Contains(view, "PRIVATE GROUP") {
 		t.Fatalf("separate navigation sections missing:\n%s", view)
 	}
 

@@ -810,9 +810,9 @@ candidate через pull request. Ближайшие milestones выполня�
    public-history audit, reproducible packaging, ручное environment approval и
    опубликовал immutable tag/release на commit `e9d40dc9694e316ddc1b761e343cfde9271b8d40`.
    Скачанные release assets независимо прошли `sha256sum -c`.
-2. **Fleet navigation + refresh contract.** Завершить
-   `SOURCES / GROUPS / VIEWS`: kind/origin/state, missing/duplicate members,
-   вычисляемые Views и multi-select membership. Одновременно зафиксировать
+2. **Fleet navigation + refresh contract.** Built-in read-only Views завершены
+   2026-08-31; продолжить `SOURCES / GROUPS / VIEWS`: kind/origin/state,
+   missing/duplicate members и multi-select membership. Одновременно зафиксировать
    responsive refresh/logging UX: bounded workers, stale/backpressure states,
    last-known data и full logs без блокировки TUI. Это ближайший ежедневный
    пользовательский slice и он не изменяет исходные inventories.
@@ -898,8 +898,9 @@ CI с core smoke до интерактивных acceptance tests.
 
 ### Этап 2 — Sources/Groups/Views navigation
 
-**Groups MVP завершён 2026-08-30; Views и расширенный source status продолжаются.**
-Левая панель теперь визуально разделяет `SOURCES` и `GROUPS`. Private groups,
+**Groups MVP завершён 2026-08-30; built-in Views MVP завершён 2026-08-31;
+расширенный source status и multi-select продолжаются.**
+Левая панель теперь визуально разделяет `SOURCES`, `GROUPS` и `VIEWS`. Private groups,
 созданные из TUI, хранятся по одной в строгих mode-0600 fragments под
 `groups.d`; `n` создаёт, host `m` или Enter → `Manage group membership` меняет
 membership по stable `source:alias`, `R` переименовывает, `D` удаляет, `e`
@@ -907,17 +908,21 @@ membership по stable `source:alias`, `R` переименовывает, `D` �
 Main-config groups остаются read-only для CRUD. Storage/model и настоящий PTY
 проход с create → two memberships → rename → delete сохраняют screenshots.
 
-1. Перестроить левую панель на секции `SOURCES`, `GROUPS`, `VIEWS`, сохраняя
-   `HOSTS` главным и выбранный host/Preview при безопасном переключении.
-2. Добавить keyboard CRUD membership: create/rename/delete group, add/remove
-   host, move между private groups как `add target + remove source group`.
+1. **Завершено:** секции `SOURCES`, `GROUPS`, `VIEWS`, при этом `HOSTS` остаётся
+   главным, а selection восстанавливается по стабильному имени/ID.
+2. Keyboard CRUD create/rename/delete и add/remove завершён; остаются
+   multi-select и move между private groups как `add target + remove source group`.
 3. Показывать source kind/origin/path-or-URL, group membership и состояния
    loaded/loading/stale/partial/error без credential values.
-4. Добавить model + real PTY traversal/screenshots для duplicate aliases,
-   missing members, empty groups, unavailable source и group command plan.
+4. Model + real PTY traversal/screenshots уже покрывают Views, empty groups,
+   unavailable source и group command plan; остаются duplicate aliases и
+   missing members.
 
-Оставшаяся часть этапа: вычисляемые `VIEWS`, отдельные source state/origin rows,
-multi-select membership и явное отображение missing members/duplicate aliases.
+Built-in `VIEWS` (`Offline`, `Errors`, `CPU ≥ 80%`, `MEM ≤ 20%`, `Stale`)
+вычисляются из последнего probe/source state, имеют stable name-based selection,
+Preview для пустого состояния и настоящий PTY traversal со screenshots.
+Оставшаяся часть этапа: отдельные source kind/state/origin rows, multi-select
+membership и явное отображение missing members/duplicate aliases.
 
 ### Этап 3 — terminal tabs MVP
 
@@ -1124,6 +1129,10 @@ persistence строится поверх готового terminal session mana
     показывает origin результата, открывает его обычное Actions menu и после
     очистки восстанавливает прежний левый контекст и stable selection. Model и
     настоящий PTY E2E проверяют cross-source target search, no-match и restore.
+21. Левая панель имеет read-only секцию `VIEWS`: `Offline`, `Errors`,
+    `CPU ≥ 80%`, `MEM ≤ 20%`, `Stale`. Выбор фильтрует HOSTS по последнему
+    состоянию, не меняет inventories/groups и восстанавливается по имени после
+    dynamic refresh и глобального поиска; model и PTY screenshots проверяют путь.
 
 ## Definition of Done
 
