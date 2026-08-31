@@ -7,11 +7,13 @@
 узлы, открывает обычный или встроенный терминал и помогает работать с десятками
 и сотнями SSH-алиасов без собственного SSH-стека.
 
-> Проект находится до первого стабильного релиза. Текущая разработка ведётся в
-> `dev`; проверенные SemVer-релизы выпускаются только из защищённой `main`.
-> Текущий private development history нельзя публиковать целиком: перед первым
-> public push нужна clean-history процедура из
-> [гайда публикации](docs/publishing.md).
+> Первый публичный stable-релиз —
+> [`v0.1.0`](https://github.com/ponomarev-prime/sshfleet-console/releases/tag/v0.1.0).
+> Текущая разработка ведётся в `dev`; проверенные SemVer-релизы выпускаются
+> только из защищённой `main` через полный regression и ручное подтверждение
+> environment `release`.
+> Граница clean public history и правила privacy-safe screenshots сохранены в
+> [гайде публикации](docs/publishing.md).
 
 ```text
  SOURCES        HOSTS — основной рабочий столбец                 PREVIEW

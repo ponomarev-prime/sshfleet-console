@@ -789,10 +789,11 @@ MVP. Каждый этап завершается отдельным reviewable 
 Разработка продолжается в `dev`; `main` принимает только проверенный release
 candidate через pull request. Ближайшие milestones выполняются в таком порядке:
 
-1. **Public launch и `v0.1.0`.** Включить GitHub rulesets/security, дождаться
-   зелёного CI на чистой публичной истории, проверить installation из release
-   candidate и только затем запустить защищённый Release workflow. Архивные
-   private tags не публикуются.
+1. **Public launch и `v0.1.0` — завершено 2026-08-31.** GitHub
+   rulesets/security включены; protected workflow выполнил полный regression,
+   public-history audit, reproducible packaging, ручное environment approval и
+   опубликовал immutable tag/release на commit `e9d40dc9694e316ddc1b761e343cfde9271b8d40`.
+   Скачанные release assets независимо прошли `sha256sum -c`.
 2. **Fleet navigation + refresh contract.** Завершить
    `SOURCES / GROUPS / VIEWS`: kind/origin/state, missing/duplicate members,
    вычисляемые Views и multi-select membership. Одновременно зафиксировать

@@ -5,8 +5,9 @@
 - Development builds use `<branch>-<12-char-commit>`, for example
   `dev-b941263e4144`; `+dirty` proves that tracked or untracked source changes
   were present during the build.
-- Stable builds use strict SemVer tags `vMAJOR.MINOR.PATCH`. The first planned
-  public release is `v0.1.0`.
+- Stable builds use strict SemVer tags `vMAJOR.MINOR.PATCH`. The first public
+  release is [`v0.1.0`](https://github.com/ponomarev-prime/sshfleet-console/releases/tag/v0.1.0),
+  published from commit `e9d40dc9694e316ddc1b761e343cfde9271b8d40`.
 - Before `v1.0.0`, MINOR may change product behavior and PATCH is reserved for
   compatible bug fixes and security hardening. From `v1.0.0`, normal SemVer
   compatibility rules apply.
