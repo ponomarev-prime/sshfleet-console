@@ -9,6 +9,10 @@ set -eu
 podman_bin=${SSHF_CI_PODMAN_BIN:-podman}
 preferred_runtime=${SSHF_CI_PODMAN_RUNTIME:-runc}
 containers_conf=${CONTAINERS_CONF:-${RUNNER_TEMP:-/tmp}/sshfleet-ci-containers.conf}
+rootful=${SSHF_CI_PODMAN_ROOTFUL:-0}
+if [ "${GITHUB_ACTIONS:-}" = true ]; then
+    rootful=${SSHF_CI_PODMAN_ROOTFUL:-1}
+fi
 
 if command -v "$preferred_runtime" >/dev/null 2>&1; then
     mkdir -p "$(dirname -- "$containers_conf")"
@@ -16,7 +20,24 @@ if command -v "$preferred_runtime" >/dev/null 2>&1; then
         printf '%s\n' '[engine]'
         printf 'runtime = "%s"\n' "$preferred_runtime"
     } >"$containers_conf"
-    runtime_path=$(CONTAINERS_CONF="$containers_conf" "$podman_bin" info --format '{{.Host.OCIRuntime.Path}}')
+    if [ "${rootful:-0}" = 1 ]; then
+        podman_path=$(command -v "$podman_bin")
+        wrapper_dir=${SSHF_CI_PODMAN_WRAPPER_DIR:-${RUNNER_TEMP:-/tmp}/sshfleet-ci-bin}
+        wrapper=$wrapper_dir/podman
+        mkdir -p "$wrapper_dir"
+        {
+            printf '%s\n' '#!/bin/sh'
+            printf 'exec sudo env CONTAINERS_CONF=%s %s "$@"\n' "$(printf '%s' "$containers_conf" | sed "s/'/'\\\\''/g; s/.*/'&'/")" "$(printf '%s' "$podman_path" | sed "s/'/'\\\\''/g; s/.*/'&'/")"
+        } >"$wrapper"
+        chmod 0755 "$wrapper"
+        runtime_path=$(sudo env CONTAINERS_CONF="$containers_conf" "$podman_path" info --format '{{.Host.OCIRuntime.Path}}')
+        if [ -n "${GITHUB_PATH:-}" ]; then
+            printf '%s\n' "$wrapper_dir" >>"$GITHUB_PATH"
+        fi
+        printf 'ci podman mode: rootful wrapper %s\n' "$wrapper"
+    else
+        runtime_path=$(CONTAINERS_CONF="$containers_conf" "$podman_bin" info --format '{{.Host.OCIRuntime.Path}}')
+    fi
     case "$runtime_path" in
         */"$preferred_runtime") ;;
         *)
