@@ -43,10 +43,13 @@ require_line 'test "$current_main" = "$GITHUB_SHA"'
 # shellcheck disable=SC2016 # literal workflow expression
 require_line 'git/ref/tags/$RELEASE_VERSION'
 require_line 'candidate/dist/sshfleet-console-*.tar.gz'
+# Publish runs in a fresh job without a checkout, so every release command must
+# address the repository explicitly instead of relying on a local .git tree.
+require_line '--repo "$GITHUB_REPOSITORY"'
 # shellcheck disable=SC2016 # literal workflow expression
 require_line '--target "$GITHUB_SHA"'
 require_line "--draft"
 # shellcheck disable=SC2016 # literal workflow expression
-require_line 'gh release edit "$RELEASE_VERSION" --draft=false'
+require_line 'gh release edit "$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" --draft=false'
 
 printf '%s\n' 'release workflow contract: ok'

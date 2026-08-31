@@ -115,8 +115,9 @@ jobs:
             candidate/dist/sshfleet-console-*.tar.gz \
             candidate/dist/full-regression-evidence-*.tar.gz \
             candidate/dist/checksums.txt \
+            --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "SSH Fleet Console $RELEASE_VERSION" \
             --draft \
             --generate-notes
-          gh release edit "$RELEASE_VERSION" --draft=false
+          gh release edit "$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" --draft=false
