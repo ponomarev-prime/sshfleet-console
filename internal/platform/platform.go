@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -91,7 +92,7 @@ func resolveShellFor(goos, configured string, args []string, origin string, gete
 		if err != nil {
 			continue
 		}
-		path = filepath.Clean(path)
+		path = cleanResolvedPath(goos, path)
 		if _, exists := seen[path]; exists {
 			continue
 		}
@@ -107,7 +108,7 @@ func resolveShellFor(goos, configured string, args []string, origin string, gete
 			}
 			return result
 		}
-		result.Effective = filepath.Clean(path)
+		result.Effective = cleanResolvedPath(goos, path)
 		if result.Origin == "" {
 			result.Origin = OriginTOML
 		}
@@ -120,6 +121,16 @@ func resolveShellFor(goos, configured string, args []string, origin string, gete
 	}
 	result.Effective = result.Available[0]
 	return result
+}
+
+// cleanResolvedPath follows the semantics of the platform being resolved,
+// rather than those of the machine running the test. This matters when native
+// Windows CI exercises a Linux resolution fixture (and vice versa).
+func cleanResolvedPath(goos, value string) string {
+	if goos == "windows" {
+		return filepath.Clean(value)
+	}
+	return path.Clean(value)
 }
 
 func shellCandidates(goos string, getenv getenvFunc) []string {

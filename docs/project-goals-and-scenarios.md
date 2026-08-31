@@ -783,6 +783,38 @@ MVP. Каждый этап завершается отдельным reviewable 
 документации и regression evidence; следующий этап не расширяет trust boundary
 предыдущего скрытым образом.
 
+### Ближайшая последовательность после public baseline
+
+Публичный репозиторий меняет точку отсчёта, но не продуктовые приоритеты.
+Разработка продолжается в `dev`; `main` принимает только проверенный release
+candidate через pull request. Ближайшие milestones выполняются в таком порядке:
+
+1. **Public launch и `v0.1.0`.** Включить GitHub rulesets/security, дождаться
+   зелёного CI на чистой публичной истории, проверить installation из release
+   candidate и только затем запустить защищённый Release workflow. Архивные
+   private tags не публикуются.
+2. **Fleet navigation completion.** Завершить `SOURCES / GROUPS / VIEWS`:
+   показывать kind/origin/state каждого source, missing и duplicate members,
+   добавить вычисляемые Views и multi-select membership. Это следующий
+   продуктовый slice: он непосредственно улучшает ежедневный путь к своим
+   серверам и остаётся read-only относительно исходных inventories.
+3. **Safe customization UX.** Реализовать validated live settings, scopes и
+   per-host private overlay с автоматической группой `MY`; исходный
+   `~/.ssh/config` и trusted source files не изменяются. После этого добавить
+   secure connection profiles и безопасный session plan restore.
+4. **Platform and workspace portability.** Закрыть platform interfaces,
+   ConPTY/native credential stores и интерактивные native acceptance; затем
+   расширять signed workspace artifacts и исследовать container bootstrap.
+5. **Source hardening, затем Web/Hub.** Offline cache, SPKI pinning и общий
+   read-only source contract должны появиться до web inventory, RBAC и любых
+   automation jobs. Foliage inventory и Dozzle lifecycle остаются отдельными
+   поздними epics с plan/approval/audit/rollback.
+
+До завершения milestone 2 не начинаем unattended multi-host execution,
+постоянный remote agent или управляемую установку ПО. Для каждого milestone
+обязательны unit/model tests, настоящий PTY/E2E путь, privacy-safe screenshots
+и артефакты одной команды `make regression`.
+
 ### Этап 0 — закрыть текущий localhost/container слой
 
 **Завершён 2026-08-30.** Реализация и доказательства входят в один regression
