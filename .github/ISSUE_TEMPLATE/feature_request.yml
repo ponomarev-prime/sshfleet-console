@@ -1,0 +1,30 @@
+name: Feature request
+description: Propose a user scenario without expanding trust boundaries implicitly
+title: "feature: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: User problem
+      description: What workflow is difficult today?
+    validations:
+      required: true
+  - type: textarea
+    id: scenario
+    attributes:
+      label: Proposed scenario
+      description: Describe the keyboard/CLI flow and expected result.
+    validations:
+      required: true
+  - type: textarea
+    id: security
+    attributes:
+      label: Security and source boundary
+      description: Which local/remote source, credential, command, or host-key boundary is involved?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered

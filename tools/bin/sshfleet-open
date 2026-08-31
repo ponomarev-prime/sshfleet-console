@@ -1,0 +1,22 @@
+#!/bin/sh
+set -eu
+
+target=${1:-}
+if [ -z "$target" ] || [ ! -f "$target" ]; then
+    printf 'sshfleet-open: expected a regular file\n' >&2
+    exit 64
+fi
+
+lines=$(sed -n '$=' "$target" 2>/dev/null || true)
+lines=${lines:-0}
+
+if [ "$lines" -gt 50 ]; then
+    BAT_PAGER=builtin
+    if command -v less >/dev/null 2>&1; then
+        BAT_PAGER='less -RF'
+    fi
+    export BAT_PAGER
+    exec bat --paging=always -- "$target"
+fi
+
+exec bat --paging=never -- "$target"

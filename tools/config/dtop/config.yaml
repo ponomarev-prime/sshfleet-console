@@ -1,0 +1,18 @@
+# Shared sshfleet defaults. Host-specific Docker endpoints are supplied by sshfleet.
+hosts:
+  - host: local
+
+icons: unicode
+all: false
+sort: cpu
+hyperlinks: auto
+columns:
+  - status
+  - name
+  - host
+  - cpu
+  - memory
+  - net_tx
+  - net_rx
+  - uptime
+  - restarts

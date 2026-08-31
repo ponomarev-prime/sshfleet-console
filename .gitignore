@@ -1,0 +1,8 @@
+/bin/
+/.toolchain/
+/.artifacts/
+/dist/
+/.tmp/
+*.log
+coverage.out
+/testdata/private/

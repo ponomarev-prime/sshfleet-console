@@ -1,0 +1,151 @@
+version = 1
+
+[terminal]
+# Local workstation only. Remote SSH and container shells use separate policy.
+# One-run precedence: --shell/--shell-arg, then this TOML, then OS auto-detection.
+default_shell = "auto"
+shell_args = []
+
+[app]
+refresh_interval = "10s"
+connect_timeout = "6s"
+# Omit max_concurrent to use 2 × runtime CPU cores. Set it explicitly to cap
+# simultaneous SSH probes for a slower workstation or sensitive network.
+ssh_binary = "ssh"
+probe_enabled = true
+load_user_ssh_config = true
+# Optional persistent application paths. CLI flags override these values.
+# sources_dir = "~/.config/sshfleet/sources.d"
+# groups_dir = "~/.config/sshfleet/groups.d"
+# overrides_dir = "~/.config/sshfleet/hosts.d"
+# SSH Fleet Console-owned binaries win over system PATH. The first available editor is
+# used by c (app config), e (host overlay), and source-edit actions.
+editor_priority = ["nvim", "vim", "nano"]
+# The launcher supplies its generated portable bundle automatically. Set an
+# explicit path only to use another locally built, checksummed bundle.
+# workspace_bundle = "~/.local/share/sshfleet/sshfleet-tools-linux-amd64.tar.gz"
+workspace_cleanup = true
+# source_fetch_timeout = "10s"
+# source_max_bytes = 4194304
+# source_state_dir = "~/.cache/sshfleet/sources"
+
+[app.containers]
+# Running local Docker/Podman containers appear as dynamic, non-SSH targets.
+enabled = true
+runtimes = ["docker", "podman"]
+refresh_interval = "2s"
+include_stopped = false
+shell_policy = "first_available"
+shell_priority = ["/bin/bash", "/bin/ash", "/bin/sh"]
+
+[app.ui]
+# HOSTS uses the remaining width. Side panes cannot be configured to displace it.
+sources_width_percent = 10
+preview_width_percent = 24
+# Width of the HOST name column inside the central table; reclaimed cells grow
+# the CPU% and MEM% bars.
+host_column_percent = 30
+
+# ~/.ssh/config is always the built-in "user" source unless launched with
+# --no-user-ssh-config. Declare only additional trusted local OpenSSH configs.
+[[sources]]
+name = "lab"
+kind = "ssh_config"
+path = "~/.ssh/lab.conf"
+
+# Trusted local-only targets are kept in a separate schema because executable
+# shell paths and working directories must never arrive from a remote source.
+# Add permanently with: sshfleet source add --type local --name workstation --path ~/.config/sshfleet/local.toml
+# Add for one run with: sshfleet --local-config workstation=~/.config/sshfleet/local.toml
+# [[sources]]
+# name = "workstation"
+# kind = "local_config"
+# path = "~/.config/sshfleet/local.toml"
+
+# A local encrypted source points to a three-file bundle created by
+# `sshfleet source pack`; the age identity itself remains in Secret Service.
+# [[sources]]
+# name = "shared"
+# kind = "encrypted_inventory"
+# path = "~/inventory/shared.bundle"
+# signing_key = "~/.config/sshfleet/allowed_signers"
+# age_identity_ref = "secret-service:sshfleet/age/shared"
+
+# HTTPS authentication uses a separate bearer credential declaration.
+# [[credentials]]
+# name = "inventory-api"
+# type = "bearer"
+# provider = "secret-service"
+# key = "sshfleet/http/inventory-api"
+#
+# [[sources]]
+# name = "central"
+# kind = "remote"
+# url = "https://inventory.example/fleet/"
+# auth_credential = "inventory-api"
+# signing_key = "~/.config/sshfleet/allowed_signers"
+# age_identity_ref = "secret-service:sshfleet/age/central"
+
+# Encrypted OpenSSH private keys stay as mode-0600 local files. A shareable
+# inventory references only this logical identity name; its passphrase is read
+# from Secret Service through AskPass and never enters TOML or argv.
+# [[credentials]]
+# name = "prod-key-passphrase"
+# type = "key-passphrase"
+# provider = "secret-service"
+# key = "sshfleet/keys/prod"
+#
+# [[identities]]
+# name = "prod-key"
+# path = "~/.ssh/sshfleet/id_ed25519_prod"
+# credential = "prod-key-passphrase"
+
+# Host entries are optional. They enrich an alias found in ssh_config, or add a
+# declarative host when hostname is supplied. TOML is the canonical format.
+[[hosts]]
+alias = "prod-api-01"
+name = "Production API 01"
+source = "user"
+tags = ["prod", "api"]
+probe = true
+# identity = "prod-key"
+
+[[hosts]]
+alias = "lab-direct"
+name = "Lab without ssh_config entry"
+source = "user"
+hostname = "192.0.2.10"
+user = "operator"
+port = 22
+proxy_jump = "bastion"
+tags = ["lab"]
+probe = false
+
+# Password values never belong here. Store one with:
+#   sshfleet credential set lab-password
+[[credentials]]
+name = "lab-password"
+type = "password"
+provider = "secret-service"
+key = "sshfleet/demo/password-nodes"
+
+[[host_rules]]
+match = "password-node-*"
+credential = "lab-password"
+
+# Groups declared here are read-only from TUI. Keyboard-created groups use one
+# private mode-0600 fragment each under groups_dir and never rewrite a source.
+# Both forms refer to stable source:alias IDs; alias patterns are supported.
+# On a host use m or Enter -> Manage group membership.
+[[groups]]
+name = "stands"
+members = ["user:prod-api-01", "lab:lab-direct"]
+match = ["user:password-node-*"]
+
+# Command presets are trusted local app configuration. Remote/restricted
+# inventories cannot define commands. argv is quoted as data, not shell text.
+[[command_presets]]
+name = "uptime"
+argv = ["uptime"]
+timeout = "15s"
+max_concurrent = 4

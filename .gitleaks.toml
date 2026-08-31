@@ -1,0 +1,7 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Documented Secret Service lookup key; this is an identifier, not secret material"
+paths = ['''docs/configuration\.md''']
+regexes = ['''sshfleet/keys/prod''']

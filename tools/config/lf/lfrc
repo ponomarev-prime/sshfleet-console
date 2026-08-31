@@ -1,0 +1,17 @@
+set shell sh
+set shellopts '-eu'
+set ifs "\n"
+
+set hidden true
+set preview true
+set previewer sshfleet-preview
+set info size:time
+set ratios 1:2:4
+set scrolloff 6
+set drawbox true
+set icons true
+
+cmd open $sshfleet-open "$f"
+
+map e $sshfleet-editor "$f"
+map <enter> open

@@ -1,0 +1,18 @@
+#!/bin/sh
+set -eu
+
+target=${1:-}
+if [ -z "$target" ]; then
+    exit 0
+fi
+
+if [ -d "$target" ]; then
+    ls -la -- "$target"
+    exit 0
+fi
+
+if bat --color=always --style=plain --paging=never -- "$target"; then
+    exit 0
+fi
+
+file -- "$target"

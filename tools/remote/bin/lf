@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
+export PATH="$root/bin:$PATH"
+export EDITOR="$root/bin/sshfleet-editor"
+exec "$root/libexec/lf" -config "$root/config/lf/lfrc" "$@"

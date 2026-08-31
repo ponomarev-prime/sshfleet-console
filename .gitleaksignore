@@ -1,0 +1,7 @@
+# Reviewed false positives in pre-publication history. Keep these fingerprints
+# exact: path-wide or rule-wide exclusions could hide a future real leak.
+cdb1d0f6d362529a07f5cbdb30a89fe3d6693a23:sshfleet.example.toml:generic-api-key:65
+7b42235e74e36e7651443f1e4737ca735f27f5e0:sshfleet.example.toml:generic-api-key:42
+7b42235e74e36e7651443f1e4737ca735f27f5e0:README.md:generic-api-key:255
+7b42235e74e36e7651443f1e4737ca735f27f5e0:internal/openssh/client_test.go:generic-api-key:137
+7b42235e74e36e7651443f1e4737ca735f27f5e0:internal/openssh/client_test.go:generic-api-key:149

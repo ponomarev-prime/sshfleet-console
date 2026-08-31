@@ -1,0 +1,58 @@
+#!/bin/sh
+set -eu
+
+root=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+tool=${1:-shell}
+retention=${2:-cleanup}
+
+cleanup() {
+    chmod -R u+w "$root" 2>/dev/null || true
+    rm -rf -- "$root"
+}
+
+case "$retention" in
+    cleanup)
+        trap cleanup EXIT
+        trap 'exit 129' HUP
+        trap 'exit 130' INT
+        trap 'exit 143' TERM
+        ;;
+    keep) ;;
+    *)
+        printf 'sshfleet workspace: invalid retention mode: %s\n' "$retention" >&2
+        exit 64
+        ;;
+esac
+
+export SSHFLEET_ORIGINAL_PATH=$PATH
+export SSHFLEET_ORIGINAL_XDG_CONFIG_HOME=${XDG_CONFIG_HOME:-"$HOME/.config"}
+export SSHFLEET_ORIGINAL_ZDOTDIR=${ZDOTDIR:-"$HOME"}
+export PATH="$root/bin:$PATH"
+export XDG_CONFIG_HOME="$root/config"
+export EDITOR="$root/bin/sshfleet-editor"
+export VISUAL="$root/bin/sshfleet-editor"
+
+case "$tool" in
+    shell)
+        printf 'SSH Fleet Console workspace: lf, nvim, dtop and bat are available; cleanup=%s\n' "$retention"
+        if [ "$retention" = keep ]; then
+            exec "$root/shell"
+        fi
+        "$root/shell"
+        ;;
+    lf|nvim|dtop|bat|batcat)
+        "$root/bin/$tool"
+        ;;
+    self-test)
+        command -v sshfleet-open >/dev/null
+        command -v sshfleet-editor >/dev/null
+        "$root/bin/lf" -version
+        "$root/bin/nvim" --version | sed -n '1p'
+        "$root/bin/dtop" --version
+        "$root/bin/bat" --version
+        ;;
+    *)
+        printf 'sshfleet workspace: unsupported tool: %s\n' "$tool" >&2
+        exit 64
+        ;;
+esac

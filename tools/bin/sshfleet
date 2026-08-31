@@ -1,0 +1,40 @@
+#!/bin/sh
+set -eu
+
+resolve_launcher() {
+    target=$1
+
+    case "$target" in
+        */*) ;;
+        *) target=$(command -v "$target") ;;
+    esac
+
+    while [ -L "$target" ]; do
+        target_dir=$(CDPATH='' cd -P "$(dirname "$target")" && pwd)
+        link_target=$(readlink "$target")
+        case "$link_target" in
+            /*) target=$link_target ;;
+            *) target=$target_dir/$link_target ;;
+        esac
+    done
+
+    target_dir=$(CDPATH='' cd -P "$(dirname "$target")" && pwd)
+    printf '%s/%s\n' "$target_dir" "$(basename "$target")"
+}
+
+script_path=$(resolve_launcher "$0")
+script_dir=$(CDPATH='' cd -P "$(dirname "$script_path")" && pwd)
+repo_root=$(CDPATH='' cd -P "$script_dir/../.." && pwd)
+
+PATH="$script_dir:$repo_root/.toolchain/bin:$PATH"
+SSHF_COMPANION_DIRS="$script_dir:$repo_root/.toolchain/bin${SSHF_COMPANION_DIRS:+:$SSHF_COMPANION_DIRS}"
+default_workspace_bundle="$repo_root/.toolchain/remote/sshfleet-tools-linux-amd64.tar.gz"
+if [ -z "${SSHF_WORKSPACE_BUNDLE:-}" ] && [ -f "$default_workspace_bundle" ] && [ -f "$default_workspace_bundle.sha256" ]; then
+    SSHF_WORKSPACE_BUNDLE=$default_workspace_bundle
+fi
+export PATH SSHF_COMPANION_DIRS
+if [ -n "${SSHF_WORKSPACE_BUNDLE:-}" ]; then
+    export SSHF_WORKSPACE_BUNDLE
+fi
+
+exec "$repo_root/bin/sshfleet" "$@"

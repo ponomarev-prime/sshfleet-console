@@ -1,0 +1,116 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Stable SemVer tag, for example v0.1.0
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stable-release
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+      SSHF_REGRESSION_ARTIFACT_DIR: ${{ github.workspace }}/.artifacts/regression
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          submodules: recursive
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: Require clean current main and increasing stable SemVer
+        run: |
+          test "$GITHUB_REF_NAME" = main
+          git fetch --force origin main:refs/remotes/origin/main --tags
+          tools/release-preflight.sh "$RELEASE_VERSION" "$GITHUB_SHA"
+      - name: Install full-regression prerequisites
+        run: sudo apt-get update && sudo apt-get install -y build-essential cmake ninja-build gettext pkg-config autoconf automake libtool unzip zsh fish
+      - name: Run the complete release gate on this commit
+        run: make regression
+      - name: Install pinned public-history scanner
+        run: |
+          go install github.com/gitleaks/gitleaks/v8@v8.30.1
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Audit public history and worktree
+        run: make audit-public
+      - name: Archive regression evidence
+        if: always()
+        run: |
+          if test -d .artifacts/regression; then
+            tar -C .artifacts -czf ".artifacts/full-regression-evidence-${RELEASE_VERSION}.tar.gz" regression
+          fi
+      - name: Build reproducible release archives
+        run: |
+          mkdir -p dist
+          SSHF_RELEASE_EXPECTED_SHA="$GITHUB_SHA" tools/build-release.sh "$RELEASE_VERSION" linux amd64 dist
+          SSHF_RELEASE_EXPECTED_SHA="$GITHUB_SHA" tools/build-release.sh "$RELEASE_VERSION" linux arm64 dist
+          cp ".artifacts/full-regression-evidence-${RELEASE_VERSION}.tar.gz" dist/
+          cd dist
+          sha256sum sshfleet-console-*.tar.gz full-regression-evidence-*.tar.gz > checksums.txt
+          sha256sum -c checksums.txt
+      - name: Upload release candidate and immutable gate evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-candidate-${{ github.run_id }}
+          path: |
+            .artifacts/full-regression-evidence-*.tar.gz
+            dist/
+          if-no-files-found: warn
+          include-hidden-files: true
+          retention-days: 90
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: release
+    permissions:
+      actions: read
+      contents: write
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+    steps:
+      - name: Download the exact verified candidate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-candidate-${{ github.run_id }}
+          path: candidate
+      - name: Verify candidate checksums
+        run: |
+          cd candidate/dist
+          sha256sum -c checksums.txt
+          test "$(find . -maxdepth 1 -name 'sshfleet-console-*.tar.gz' | wc -l)" -eq 2
+          test "$(find . -maxdepth 1 -name 'full-regression-evidence-*.tar.gz' | wc -l)" -eq 1
+      - name: Revalidate main and publish immutable candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          current_main=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
+          test "$current_main" = "$GITHUB_SHA"
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_VERSION" >/dev/null 2>&1; then
+            printf '%s\n' "tag already exists: $RELEASE_VERSION" >&2
+            exit 1
+          fi
+          gh release create "$RELEASE_VERSION" \
+            candidate/dist/sshfleet-console-*.tar.gz \
+            candidate/dist/full-regression-evidence-*.tar.gz \
+            candidate/dist/checksums.txt \
+            --target "$GITHUB_SHA" \
+            --title "SSH Fleet Console $RELEASE_VERSION" \
+            --draft \
+            --generate-notes
+          gh release edit "$RELEASE_VERSION" --draft=false

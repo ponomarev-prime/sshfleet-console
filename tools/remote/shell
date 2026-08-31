@@ -1,0 +1,118 @@
+#!/bin/sh
+set -eu
+
+root=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+shell=${SHELL:-/bin/sh}
+if [ ! -x "$shell" ]; then
+    shell=/bin/sh
+fi
+
+export SSHFLEET_WORKSPACE_ROOT="$root"
+export SSHFLEET_ORIGINAL_PATH=${SSHFLEET_ORIGINAL_PATH:-$PATH}
+export SSHFLEET_ORIGINAL_XDG_CONFIG_HOME=${SSHFLEET_ORIGINAL_XDG_CONFIG_HOME:-${XDG_CONFIG_HOME:-"$HOME/.config"}}
+export SSHFLEET_ORIGINAL_ZDOTDIR=${SSHFLEET_ORIGINAL_ZDOTDIR:-${ZDOTDIR:-"$HOME"}}
+
+configure_workspace() {
+    PATH="$root/bin:$PATH"
+    XDG_CONFIG_HOME="$root/config"
+    EDITOR="$root/bin/sshfleet-editor"
+    VISUAL="$root/bin/sshfleet-editor"
+    export PATH XDG_CONFIG_HOME EDITOR VISUAL
+}
+
+shell_name=${shell##*/}
+state_dir="$root/config/sshfleet-shell"
+mkdir -p "$state_dir"
+
+case "$shell_name" in
+    bash)
+        cat >"$state_dir/bashrc" <<'EOF'
+export PATH="$SSHFLEET_ORIGINAL_PATH"
+export XDG_CONFIG_HOME="$SSHFLEET_ORIGINAL_XDG_CONFIG_HOME"
+if [ -r "$HOME/.bashrc" ]; then
+    . "$HOME/.bashrc"
+fi
+export PATH="$SSHFLEET_WORKSPACE_ROOT/bin:$PATH"
+export XDG_CONFIG_HOME="$SSHFLEET_WORKSPACE_ROOT/config"
+export EDITOR="$SSHFLEET_WORKSPACE_ROOT/bin/sshfleet-editor"
+export VISUAL="$SSHFLEET_WORKSPACE_ROOT/bin/sshfleet-editor"
+EOF
+        configure_workspace
+        exec "$shell" --noprofile --rcfile "$state_dir/bashrc" -i
+        ;;
+    zsh)
+        zsh_dir="$state_dir/zsh"
+        mkdir -p "$zsh_dir"
+        cat >"$zsh_dir/.zshenv" <<'EOF'
+export PATH="$SSHFLEET_ORIGINAL_PATH"
+export XDG_CONFIG_HOME="$SSHFLEET_ORIGINAL_XDG_CONFIG_HOME"
+if [ -r "$SSHFLEET_ORIGINAL_ZDOTDIR/.zshenv" ]; then
+    . "$SSHFLEET_ORIGINAL_ZDOTDIR/.zshenv"
+fi
+export PATH="$SSHFLEET_WORKSPACE_ROOT/bin:$PATH"
+export XDG_CONFIG_HOME="$SSHFLEET_WORKSPACE_ROOT/config"
+export EDITOR="$SSHFLEET_WORKSPACE_ROOT/bin/sshfleet-editor"
+export VISUAL="$SSHFLEET_WORKSPACE_ROOT/bin/sshfleet-editor"
+EOF
+        cat >"$zsh_dir/.zshrc" <<'EOF'
+export PATH="$SSHFLEET_ORIGINAL_PATH"
+export XDG_CONFIG_HOME="$SSHFLEET_ORIGINAL_XDG_CONFIG_HOME"
+if [ -r "$SSHFLEET_ORIGINAL_ZDOTDIR/.zshrc" ]; then
+    . "$SSHFLEET_ORIGINAL_ZDOTDIR/.zshrc"
+fi
+export PATH="$SSHFLEET_WORKSPACE_ROOT/bin:$PATH"
+export XDG_CONFIG_HOME="$SSHFLEET_WORKSPACE_ROOT/config"
+export EDITOR="$SSHFLEET_WORKSPACE_ROOT/bin/sshfleet-editor"
+export VISUAL="$SSHFLEET_WORKSPACE_ROOT/bin/sshfleet-editor"
+EOF
+        configure_workspace
+        ZDOTDIR="$zsh_dir"
+        export ZDOTDIR
+        exec "$shell" -i
+        ;;
+    fish)
+        fish_dir="$root/config/fish"
+        mkdir -p "$fish_dir"
+        cat >"$fish_dir/config.fish" <<'EOF'
+set -gx PATH $SSHFLEET_ORIGINAL_PATH
+set -gx XDG_CONFIG_HOME "$SSHFLEET_ORIGINAL_XDG_CONFIG_HOME"
+if test -r "$SSHFLEET_ORIGINAL_XDG_CONFIG_HOME/fish/config.fish"
+    source "$SSHFLEET_ORIGINAL_XDG_CONFIG_HOME/fish/config.fish"
+end
+set -gx PATH "$SSHFLEET_WORKSPACE_ROOT/bin" $PATH
+set -gx XDG_CONFIG_HOME "$SSHFLEET_WORKSPACE_ROOT/config"
+set -gx EDITOR "$SSHFLEET_WORKSPACE_ROOT/bin/sshfleet-editor"
+set -gx VISUAL "$SSHFLEET_WORKSPACE_ROOT/bin/sshfleet-editor"
+EOF
+        configure_workspace
+        exec "$shell" -i
+        ;;
+    sh|dash|ash|ksh|mksh)
+        cat >"$state_dir/shrc" <<'EOF'
+PATH="$SSHFLEET_ORIGINAL_PATH"
+XDG_CONFIG_HOME="$SSHFLEET_ORIGINAL_XDG_CONFIG_HOME"
+export PATH XDG_CONFIG_HOME
+if [ -r "$HOME/.profile" ]; then
+    . "$HOME/.profile"
+fi
+export PATH="$SSHFLEET_WORKSPACE_ROOT/bin:$PATH"
+export XDG_CONFIG_HOME="$SSHFLEET_WORKSPACE_ROOT/config"
+export EDITOR="$SSHFLEET_WORKSPACE_ROOT/bin/sshfleet-editor"
+export VISUAL="$SSHFLEET_WORKSPACE_ROOT/bin/sshfleet-editor"
+EOF
+        configure_workspace
+        ENV="$state_dir/shrc"
+        export ENV
+        exec "$shell" -i
+        ;;
+    *)
+        printf 'sshfleet workspace: unsupported interactive shell %s; using /bin/sh\n' "$shell_name" >&2
+        if [ ! -x /bin/sh ]; then
+            printf 'sshfleet workspace: no compatible shell is available\n' >&2
+            exit 69
+        fi
+        SHELL=/bin/sh
+        export SHELL
+        exec "$0"
+        ;;
+esac

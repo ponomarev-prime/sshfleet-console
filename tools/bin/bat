@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+
+script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+repo_root=$(CDPATH='' cd -- "$script_dir/../.." && pwd)
+
+BAT_CONFIG_PATH="$repo_root/tools/config/bat/config"
+export BAT_CONFIG_PATH
+
+exec "$repo_root/.toolchain/bin/bat" "$@"

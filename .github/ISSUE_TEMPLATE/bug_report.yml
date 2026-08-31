@@ -1,0 +1,61 @@
+name: Bug report
+description: Report a reproducible SSH Fleet Console defect
+title: "bug: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include passwords, private keys, tokens, real fleet inventories, or unredacted terminal screenshots.
+        Security vulnerabilities must be reported privately through GitHub Security Advisories.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `sshfleet --version`.
+      placeholder: sshfleet dev-0123456789ab (...)
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction
+      description: Minimal steps using sanitized aliases or fixture data.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: healthcheck
+    attributes:
+      label: Sanitized healthcheck
+      description: Optional output of `sshfleet healthcheck` after removing private paths and host data.
+      render: text
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy confirmation
+      options:
+        - label: I removed credentials, private keys, tokens, real hosts, IP addresses, usernames, and private paths.
+          required: true

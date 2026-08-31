@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: Install supported parent shells
+        run: sudo apt-get update && sudo apt-get install -y zsh fish
+      - name: Core checks
+        run: make check-core
+      - name: Race detector
+        run: make test-race
+      - name: PTY end-to-end
+        run: make test-e2e
+      - name: TUI screenshots and action-menu traversal
+        run: make test-screenshots
+      - name: Coverage
+        run: make cover
+      - name: Upload test evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: core-test-evidence-${{ github.run_id }}
+          path: |
+            .artifacts/tui-screenshots/
+            coverage.out
+          if-no-files-found: warn
+          include-hidden-files: true
+          retention-days: 14
+
+  native-foundation:
+    name: Native foundation (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: Native platform contract tests
+        run: go test ./internal/platform
+      - name: Native core build
+        run: go build ./cmd/sshf
+      - name: Embedded build provenance smoke
+        run: go run ./cmd/sshf --version

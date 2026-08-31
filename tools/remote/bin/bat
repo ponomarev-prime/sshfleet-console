@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+root=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
+export BAT_CONFIG_PATH="$root/config/bat/config"
+exec "$root/lib/ld-linux-x86-64.so.2" --library-path "$root/lib" \
+    "$root/libexec/bat" "$@"

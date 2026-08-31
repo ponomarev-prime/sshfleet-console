@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+
+script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+repo_root=$(CDPATH='' cd -- "$script_dir/../.." && pwd)
+
+PATH="$repo_root/tools/bin:$repo_root/.toolchain/bin:$PATH"
+EDITOR=sshfleet-editor
+export PATH EDITOR
+
+exec "$repo_root/.toolchain/bin/lf" -config "$repo_root/tools/config/lf/lfrc" "$@"

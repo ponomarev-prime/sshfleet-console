@@ -1,0 +1,19 @@
+#!/bin/sh
+set -eu
+
+if [ -n "${SSHFLEET_EDITOR:-}" ]; then
+    if command -v "$SSHFLEET_EDITOR" >/dev/null 2>&1; then
+        exec "$SSHFLEET_EDITOR" "$@"
+    fi
+    printf 'sshfleet-editor: configured editor not found: %s\n' "$SSHFLEET_EDITOR" >&2
+    exit 69
+fi
+
+for editor in nvim vim nano; do
+    if command -v "$editor" >/dev/null 2>&1; then
+        exec "$editor" "$@"
+    fi
+done
+
+printf 'sshfleet-editor: no editor found (tried nvim, vim, nano)\n' >&2
+exit 69

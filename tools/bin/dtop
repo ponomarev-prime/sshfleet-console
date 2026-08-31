@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+
+script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+repo_root=$(CDPATH='' cd -- "$script_dir/../.." && pwd)
+
+XDG_CONFIG_HOME="$repo_root/tools/config"
+export XDG_CONFIG_HOME
+
+exec "$repo_root/.toolchain/bin/dtop" "$@"

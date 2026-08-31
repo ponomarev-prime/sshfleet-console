@@ -1,0 +1,12 @@
+[submodule "tools/src/lf"]
+	path = tools/src/lf
+	url = https://github.com/gokcehan/lf.git
+[submodule "tools/src/dtop"]
+	path = tools/src/dtop
+	url = https://github.com/amir20/dtop.git
+[submodule "tools/src/nvim"]
+	path = tools/src/nvim
+	url = https://github.com/neovim/neovim.git
+[submodule "tools/src/bat"]
+	path = tools/src/bat
+	url = https://github.com/sharkdp/bat.git
