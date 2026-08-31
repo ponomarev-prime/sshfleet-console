@@ -26,6 +26,8 @@ jobs:
           cache-dependency-path: go.sum
       - name: Install companion build prerequisites
         run: sudo apt-get update && sudo apt-get install -y build-essential cmake ninja-build gettext pkg-config autoconf automake libtool unzip zsh fish
+      - name: Align hosted-runner Podman OCI runtime
+        run: tools/prepare-ci-podman.sh
       - name: Run full regression
         env:
           SSHF_REGRESSION_ARTIFACT_DIR: ${{ github.workspace }}/.artifacts/regression

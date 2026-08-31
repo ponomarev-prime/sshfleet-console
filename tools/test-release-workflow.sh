@@ -22,6 +22,7 @@ require_line "permissions:"
 require_line "contents: read"
 # shellcheck disable=SC2016 # literal workflow expression
 require_line 'tools/release-preflight.sh "$RELEASE_VERSION" "$GITHUB_SHA"'
+require_line "run: tools/prepare-ci-podman.sh"
 require_line "run: make regression"
 require_line "run: make audit-public"
 # shellcheck disable=SC2016 # literal workflow expression

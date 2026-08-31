@@ -39,6 +39,7 @@ test-licenses:
 test-version:
 	tools/test-versioning.sh
 	tools/test-release-workflow.sh
+	tools/test-ci-podman.sh
 
 test-race:
 	go test -race ./...
