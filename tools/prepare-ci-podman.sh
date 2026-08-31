@@ -1,11 +1,35 @@
 #!/bin/sh
 set -eu
 
-# GitHub's ubuntu-24.04 image can contain a recent Podman configured to use an
-# older /usr/bin/crun while the compatible crun is installed in /usr/local/bin.
-# Keep the workaround narrow, observable and removable once the runner rollout
-# is complete. No network access or unpinned download is involved.
+# GitHub's ubuntu-24.04 image currently has a Podman/crun rollout mismatch.
+# Container creation may work while an interactive `podman exec --tty` fails.
+# Select the already installed runc through Podman's supported containers.conf
+# interface. Keep the workaround CI-only, observable and removable once the
+# runner rollout is complete. No network access or unpinned download is used.
 podman_bin=${SSHF_CI_PODMAN_BIN:-podman}
+preferred_runtime=${SSHF_CI_PODMAN_RUNTIME:-runc}
+containers_conf=${CONTAINERS_CONF:-${RUNNER_TEMP:-/tmp}/sshfleet-ci-containers.conf}
+
+if command -v "$preferred_runtime" >/dev/null 2>&1; then
+    mkdir -p "$(dirname -- "$containers_conf")"
+    {
+        printf '%s\n' '[engine]'
+        printf 'runtime = "%s"\n' "$preferred_runtime"
+    } >"$containers_conf"
+    runtime_path=$(CONTAINERS_CONF="$containers_conf" "$podman_bin" info --format '{{.Host.OCIRuntime.Path}}')
+    case "$runtime_path" in
+        */"$preferred_runtime") ;;
+        *)
+            printf 'ci podman runtime: wanted %s, got %s\n' "$preferred_runtime" "$runtime_path" >&2
+            exit 1
+            ;;
+    esac
+    printf 'ci podman runtime: %s via %s\n' "$runtime_path" "$containers_conf"
+    exit 0
+fi
+
+# Fallback for images without runc: align an old configured crun with the
+# compatible preinstalled build.
 active_crun=${SSHF_CI_CRUN_ACTIVE:-/usr/bin/crun}
 preferred_crun=${SSHF_CI_CRUN_PREFERRED:-/usr/local/bin/crun}
 

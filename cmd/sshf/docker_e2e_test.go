@@ -204,12 +204,16 @@ func assertTemporaryWorkspaceBundle(t *testing.T, bundle, sshConfig string, clie
 
 func dockerSSHFixture(t *testing.T, directory string, authorizedKey []byte) string {
 	t.Helper()
-	if err := os.MkdirAll(directory, 0o700); err != nil {
+	// The public key is consumed after sshd drops privileges to the fixture
+	// user. GitHub-hosted runners use a different host UID than local developer
+	// machines, so a 0700 bind-mounted directory plus a 0600 authorized_keys
+	// accidentally made the fixture depend on matching host/container UIDs.
+	if err := os.MkdirAll(directory, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	hostKey := filepath.Join(directory, "host_key")
 	generateSSHKey(t, hostKey)
-	if err := os.WriteFile(filepath.Join(directory, "authorized_keys"), authorizedKey, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(directory, "authorized_keys"), authorizedKey, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	return hostKey
