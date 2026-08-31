@@ -184,7 +184,11 @@ source = "fixture"
 	mark = h.mark()
 	h.send("\r\r")
 	h.waitForAfter(mark, "Welcome to GitLab, @fixture!", 5*time.Second)
-	h.waitForAfter(mark, "Сессия завершена", 5*time.Second)
+	// Git endpoints conventionally exit non-zero after a successful greeting.
+	// Completion messages are intentionally transient and may be superseded by
+	// another asynchronous UI update, so wait for the durable restored Fleet
+	// state and captured session tail instead.
+	h.waitForAfter(mark, "LAST SESSION · REMOTE", 8*time.Second)
 
 	// Return to Alpha, choose the second menu action, and exercise a real PTY
 	// nested in the Preview pane without suspending the fleet UI.
