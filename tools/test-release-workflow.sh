@@ -24,6 +24,7 @@ require_line "contents: read"
 require_line 'tools/release-preflight.sh "$RELEASE_VERSION" "$GITHUB_SHA"'
 require_line "run: tools/prepare-ci-podman.sh"
 require_line "run: make regression"
+require_line "go install github.com/zricethezav/gitleaks/v8@v8.30.1"
 require_line "run: make audit-public"
 # shellcheck disable=SC2016 # literal workflow expression
 require_line 'SSHF_RELEASE_EXPECTED_SHA="$GITHUB_SHA" tools/build-release.sh "$RELEASE_VERSION" linux amd64 dist'
