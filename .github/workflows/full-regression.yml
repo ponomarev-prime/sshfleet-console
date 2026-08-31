@@ -16,8 +16,6 @@ jobs:
   regression:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
-    env:
-      CONTAINERS_CONF: ${{ runner.temp }}/sshfleet-ci-containers.conf
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -29,10 +27,13 @@ jobs:
       - name: Install companion build prerequisites
         run: sudo apt-get update && sudo apt-get install -y build-essential cmake ninja-build gettext pkg-config autoconf automake libtool unzip zsh fish
       - name: Align hosted-runner Podman OCI runtime
+        env:
+          CONTAINERS_CONF: ${{ runner.temp }}/sshfleet-ci-containers.conf
         run: tools/prepare-ci-podman.sh
       - name: Run full regression
         env:
           SSHF_REGRESSION_ARTIFACT_DIR: ${{ github.workspace }}/.artifacts/regression
+          CONTAINERS_CONF: ${{ runner.temp }}/sshfleet-ci-containers.conf
         run: make regression
       - name: Archive regression evidence
         if: always()
