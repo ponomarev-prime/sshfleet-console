@@ -50,7 +50,7 @@ test-e2e:
 test-screenshots:
 	rm -rf .artifacts/tui-screenshots
 	mkdir -p .artifacts/tui-screenshots
-	SSHF_SCREENSHOT_DIR="$(CURDIR)/.artifacts/tui-screenshots" go test -v ./cmd/sshf -run 'TestTUIEndToEnd(ScreenshotsAndActionMenuTraversal|GroupsCRUDAndMembership|LocalContainerMenuPreviewAndLogs|TrustedLocalConfigMenuAndPreview)' -count=1
+	SSHF_SCREENSHOT_DIR="$(CURDIR)/.artifacts/tui-screenshots" go test -v ./cmd/sshf -run 'TestTUIEndToEnd(ScreenshotsAndActionMenuTraversal|GroupsCRUDAndMembership|LocalContainerMenuPreviewAndLogs|TrustedLocalConfigMenuAndPreview|GlobalHostSearchAcrossSources)' -count=1
 
 test-public-screenshots:
 	rm -rf .artifacts/public-screenshots

@@ -1539,6 +1539,104 @@ func TestKeyboardNavigationAndFiltering(t *testing.T) {
 	}
 }
 
+func TestGlobalHostSearchCrossesSourcesAndRestoresContext(t *testing.T) {
+	m := New(
+		[]inventory.Host{
+			{ID: "one:alpha", Alias: "alpha", Name: "Alpha API", SourceName: "one"},
+			{ID: "one:beta", Alias: "beta", Name: "Beta worker", SourceName: "one"},
+			{ID: "two:gamma", Alias: "gamma", Name: "Gamma Stand", SourceName: "two", Hostname: "192.0.2.20", User: "operator", Port: 2222, Tags: []string{"perf", "stand"}, Groups: []string{"Pregel"}},
+		},
+		[]inventory.SourceSummary{{Name: "one", Hosts: 2}, {Name: "two", Hosts: 1}},
+		openssh.Client{},
+		time.Minute,
+		2,
+	)
+	m.source = 1
+	m.selected = 1
+
+	m = updateWithKey(t, m, tea.Key{Text: "/", Code: '/'})
+	if !m.filtering || m.source != 0 || !m.searchReturnSet || m.searchReturnHostID != "one:beta" {
+		t.Fatalf("search start = filtering:%v source:%d return:%v/%q", m.filtering, m.source, m.searchReturnSet, m.searchReturnHostID)
+	}
+	for _, r := range "operator perf 192.0.2.20" {
+		m = updateWithKey(t, m, tea.Key{Text: string(r), Code: r})
+	}
+	visible := m.visibleIndices()
+	if len(visible) != 1 || m.hosts[visible[0]].ID != "two:gamma" {
+		t.Fatalf("global target search visible = %#v", visible)
+	}
+	view := ansi.Strip(m.renderHosts(120, 12))
+	if !strings.Contains(view, "source: two") {
+		t.Fatalf("global result does not expose source origin:\n%s", view)
+	}
+
+	m = updateWithKey(t, m, tea.Key{Code: tea.KeyEnter})
+	m = updateWithKey(t, m, tea.Key{Code: tea.KeyEsc})
+	visible = m.visibleIndices()
+	if m.filter != "" || m.filtering || m.source != 1 || m.selected != 1 || len(visible) != 2 || m.hosts[visible[m.selected]].ID != "one:beta" {
+		t.Fatalf("restored search context = filter:%q active:%v source:%d selected:%d visible:%#v", m.filter, m.filtering, m.source, m.selected, visible)
+	}
+}
+
+func TestGlobalHostSearchUsesResolvedTargetsGroupsAndContainerMetadata(t *testing.T) {
+	m := New(
+		[]inventory.Host{
+			{ID: "user:ssh-alias", Alias: "ssh-alias", SourceName: "user", Groups: []string{"Production"}},
+			{ID: "container:docker:abcdef", Alias: "web-box", SourceName: "containers · docker", Transport: inventory.TransportContainer, ContainerRuntime: "docker", ContainerID: "abcdef", ContainerImage: "registry.example/web:v2", ContainerStatus: "Up 2 hours"},
+		},
+		nil,
+		openssh.Client{},
+		time.Minute,
+		2,
+	)
+	m.effective["user:ssh-alias"] = openssh.Effective{Hostname: "srv.internal.example", User: "deploy", Port: "2202", ProxyJump: "bastion"}
+
+	for query, wantID := range map[string]string{
+		"deploy bastion 2202":        "user:ssh-alias",
+		"production internal":        "user:ssh-alias",
+		"docker registry.example v2": "container:docker:abcdef",
+	} {
+		m.filter = query
+		visible := m.visibleIndices()
+		if len(visible) != 1 || m.hosts[visible[0]].ID != wantID {
+			t.Errorf("query %q visible = %#v, want %s", query, visible, wantID)
+		}
+	}
+
+	m.filter = "нет-такого-хоста"
+	if visible := m.visibleIndices(); len(visible) != 0 {
+		t.Fatalf("no-match search visible = %#v", visible)
+	}
+	if view := ansi.Strip(m.renderHosts(100, 10)); !strings.Contains(view, "No hosts match global search") {
+		t.Fatalf("no-match view = %q", view)
+	}
+}
+
+func TestGlobalHostSearchRestoresGroupByNameAfterSourceRefresh(t *testing.T) {
+	host := inventory.Host{ID: "one:alpha", Alias: "alpha", SourceName: "one", Groups: []string{"stands"}}
+	m := New(
+		[]inventory.Host{host, {ID: "two:needle", Alias: "needle", SourceName: "two"}},
+		[]inventory.SourceSummary{{Name: "one", Hosts: 1}, {Name: "two", Hosts: 1}},
+		openssh.Client{},
+		time.Minute,
+		2,
+		WithGroupsAndCommands([]config.HostGroup{{Name: "stands", Members: []string{"one:alpha"}}}, nil),
+	)
+	m.source = len(m.sources) + 1
+	m.selected = 0
+	m.beginGlobalSearch()
+	m.filter = "needle"
+
+	// Dynamic discovery may insert a Source while search is active. Restoration
+	// must use the group name, not the obsolete numeric row index.
+	m.sources = append([]inventory.SourceSummary{{Name: "dynamic", Hosts: 0}}, m.sources...)
+	m.restoreSearchContext()
+	visible := m.visibleIndices()
+	if m.selectedGroup() != "stands" || len(visible) != 1 || m.hosts[visible[0]].ID != host.ID {
+		t.Fatalf("restored group = %q, visible = %#v", m.selectedGroup(), visible)
+	}
+}
+
 func TestResponsivePaneLayouts(t *testing.T) {
 	m := New(
 		[]inventory.Host{{ID: "one:alpha", Alias: "alpha", SourceName: "one"}},

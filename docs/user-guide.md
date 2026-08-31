@@ -37,8 +37,8 @@
 | Sources | `n` | создать пустую private group в `groups.d` |
 | Host | `m` | открыть membership и добавить/убрать stable `source:alias` |
 | Group | `R`, `D`, `e` | переименовать, удалить или открыть fragment в editor |
-| Hosts | `/` | фильтр по alias, name, source или tag |
-| Filter | `Esc` | закрыть ввод; повторный `Esc` очищает фильтр |
+| Hosts | `/` | глобальный живой поиск host по всему fleet |
+| Search | `Esc` | закрыть ввод; повторный `Esc` очищает поиск и возвращает прежний Source/Host |
 | Host | `Enter` | контекстное Actions menu |
 | Host | `e` | private TOML overlay выбранного host |
 | Любой экран | `c` | главный application TOML; restart применяет изменения |
@@ -54,6 +54,32 @@
 печатаются escape sequences, откройте `?`: там указан фактически найденный
 editor и origin. Приоритет по умолчанию — owned `nvim`, system `nvim`, `vim`,
 `nano`.
+
+## Глобальный поиск host
+
+Нажмите `/` из любого Source или Group и сразу печатайте запрос. Пока строка
+ввода открыта, результаты обновляются на каждой клавише по всему fleet, а не
+только внутри текущего левого фильтра. На время поиска выделяется `All available`;
+под найденным host показывается `source: NAME`, а Preview содержит его полный
+origin.
+
+Ищутся безопасные не-секретные поля: alias и display name, stable ID, source,
+target hostname, user, port, ProxyJump, tags, groups, transport и container
+runtime/ID/image/status. Для OpenSSH alias также используется уже разрешённый
+локально effective target. Запрос регистронезависимый; слова разделяются
+пробелами и должны совпасть все:
+
+```text
+/202
+/perf 202
+/deploy 192.0.2.77
+/docker postgres
+```
+
+`Enter` фиксирует найденный список и оставляет обычную навигацию/Actions menu.
+Первый `Esc` во время ввода только закрывает строку, второй очищает запрос и
+восстанавливает Source/Group и host, выбранные до поиска. Пустой запрос сразу
+возвращает исходный контекст. Поиск не меняет inventories, groups или overlays.
 
 ## Меню Actions
 

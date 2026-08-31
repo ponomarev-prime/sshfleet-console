@@ -134,7 +134,7 @@ SSH Fleet Console — терминальный менеджер SSH-ресурс
 - Интерфейс должен оставаться плоским и компактным, ближе к `lf`, без тяжёлых
   рамок и визуального шума.
 - `j/k`, стрелки, `g/G`, `h/l`, `Tab`, `/` и `Esc` обеспечивают клавиатурную
-  навигацию и фильтрацию.
+  навигацию и глобальный текстовый поиск host по всему fleet.
 - Во время embedded SSH session Preview временно расширяется за счёт `HOSTS`,
   оставляя fleet различимым; resize передаётся remote PTY. После закрытия
   исходные проценты `[app.ui]` восстанавливаются без изменения config.
@@ -444,6 +444,19 @@ agentless SSH navigator и не получает неограниченный у
 1. Фокус переходит в `SOURCES`.
 2. `All available` показывает объединённый fleet.
 3. Выбор source фильтрует hosts без потери поиска и selection safety.
+
+### C1. Глобальный текстовый поиск host
+
+1. Из любого Source или Group пользователь нажимает `/`; приложение запоминает
+   stable ID выбранного host и левый контекст, затем показывает live results из
+   всего fleet через `All available`.
+2. Регистронезависимый multi-term запрос ищет по alias/name, stable ID, source,
+   target/user/port/ProxyJump, tags/groups, transport и container metadata;
+   каждое слово запроса обязано совпасть.
+3. Строка результата явно показывает source, Preview обновляется для stable host,
+   а `Enter` открывает обычное Actions menu без изменения trust boundary.
+4. Очистка поиска восстанавливает прежние Source/Group и host; missing host после
+   reload обрабатывается безопасным выбором первой доступной строки.
 
 ### D. Меню действий по Enter
 
@@ -1104,6 +1117,10 @@ persistence строится поверх готового terminal session mana
     upstream license texts; `make test-licenses` сверяет их с реально linked Go
     modules. Optional companion workspace остаётся отдельным local-only
     artifact и не получает ложного обещания готовности к redistribution.
+20. `/` выполняет глобальный multi-term поиск host поверх всех Sources/Groups,
+    показывает origin результата, открывает его обычное Actions menu и после
+    очистки восстанавливает прежний левый контекст и stable selection. Model и
+    настоящий PTY E2E проверяют cross-source target search, no-match и restore.
 
 ## Definition of Done
 

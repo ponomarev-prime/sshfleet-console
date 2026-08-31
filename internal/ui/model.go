@@ -41,64 +41,68 @@ type Model struct {
 	previewWidthPct int
 	hostColumnPct   int
 
-	width               int
-	height              int
-	focus               focus
-	source              int // 0 is All available; source N maps to sources[N-1].
-	selected            int
-	filter              string
-	filtering           bool
-	message             string
-	results             map[string]probe.Result
-	effective           map[string]openssh.Effective
-	polling             map[string]bool
-	sessionTail         map[string][]string
-	hostKeyPlan         *knownhosts.Plan
-	hostKeyIndex        int
-	hostKeyBusy         bool
-	hostKeyBackup       map[string]string
-	hostKeyPrompt       map[string]bool
-	queue               []int
-	active              int
-	lastRefresh         time.Time
-	overridesDir        string
-	appConfigPath       string
-	editor              string
-	reload              func() ([]inventory.Host, []inventory.SourceSummary, error)
-	editing             bool
-	refreshAfter        bool
-	actionMenu          bool
-	actionSelected      int
-	actionHostIndex     int
-	embedded            *session.Embedded
-	embeddedIndex       int
-	embeddedStarting    bool
-	embeddedClosing     bool
-	tabs                []terminalTab
-	activeTab           int // 0 is the permanent Fleet tab; N maps to tabs[N-1].
-	nextTabID           uint64
-	quitTabsConfirm     bool
-	quitAfterTabsClose  bool
-	targetStarting      bool
-	workspaceStarting   bool
-	health              []toolcheck.Result
-	editorHealth        toolcheck.Result
-	healthVisible       bool
-	groups              []string
-	groupDefinitions    []config.HostGroup
-	groupsDir           string
-	groupEditor         string
-	groupReload         func() ([]inventory.Host, []inventory.SourceSummary, []config.HostGroup, error)
-	groupDialog         groupDialogState
-	commands            []config.Command
-	groupCommandMenu    bool
-	groupCommandChoice  int
-	groupCommandConfirm bool
-	groupCommandRunning bool
-	groupResults        map[string]groupCommandResult
-	dynamicRefresh      time.Duration
-	dynamicDiscover     func() ([]inventory.Host, []inventory.SourceSummary)
-	dynamicBusy         bool
+	width                  int
+	height                 int
+	focus                  focus
+	source                 int // 0 is All available; source N maps to sources[N-1].
+	selected               int
+	filter                 string
+	filtering              bool
+	searchReturnSourceName string
+	searchReturnGroupName  string
+	searchReturnHostID     string
+	searchReturnSet        bool
+	message                string
+	results                map[string]probe.Result
+	effective              map[string]openssh.Effective
+	polling                map[string]bool
+	sessionTail            map[string][]string
+	hostKeyPlan            *knownhosts.Plan
+	hostKeyIndex           int
+	hostKeyBusy            bool
+	hostKeyBackup          map[string]string
+	hostKeyPrompt          map[string]bool
+	queue                  []int
+	active                 int
+	lastRefresh            time.Time
+	overridesDir           string
+	appConfigPath          string
+	editor                 string
+	reload                 func() ([]inventory.Host, []inventory.SourceSummary, error)
+	editing                bool
+	refreshAfter           bool
+	actionMenu             bool
+	actionSelected         int
+	actionHostIndex        int
+	embedded               *session.Embedded
+	embeddedIndex          int
+	embeddedStarting       bool
+	embeddedClosing        bool
+	tabs                   []terminalTab
+	activeTab              int // 0 is the permanent Fleet tab; N maps to tabs[N-1].
+	nextTabID              uint64
+	quitTabsConfirm        bool
+	quitAfterTabsClose     bool
+	targetStarting         bool
+	workspaceStarting      bool
+	health                 []toolcheck.Result
+	editorHealth           toolcheck.Result
+	healthVisible          bool
+	groups                 []string
+	groupDefinitions       []config.HostGroup
+	groupsDir              string
+	groupEditor            string
+	groupReload            func() ([]inventory.Host, []inventory.SourceSummary, []config.HostGroup, error)
+	groupDialog            groupDialogState
+	commands               []config.Command
+	groupCommandMenu       bool
+	groupCommandChoice     int
+	groupCommandConfirm    bool
+	groupCommandRunning    bool
+	groupResults           map[string]groupCommandResult
+	dynamicRefresh         time.Duration
+	dynamicDiscover        func() ([]inventory.Host, []inventory.SourceSummary)
+	dynamicBusy            bool
 }
 
 type startPollMsg struct{}
@@ -742,8 +746,16 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.filtering {
 		switch msg.String() {
-		case "esc", "enter":
+		case "esc":
 			m.filtering = false
+			if m.filter == "" {
+				m.restoreSearchContext()
+			}
+		case "enter":
+			m.filtering = false
+			if strings.TrimSpace(m.filter) == "" {
+				m.restoreSearchContext()
+			}
 		case "backspace":
 			runes := []rune(m.filter)
 			if len(runes) > 0 {
@@ -825,8 +837,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m.openMembershipGroup()
 		}
 	case "/":
-		m.focus = focusHosts
-		m.filtering = true
+		m.beginGlobalSearch()
 		return m, nil
 	case "tab":
 		if m.focus == focusSources {
@@ -843,8 +854,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, m.resolveSelectedCmd()
 	case "esc":
 		if m.filter != "" {
-			m.filter = ""
-			m.selected = 0
+			m.restoreSearchContext()
 			return m, m.resolveSelectedCmd()
 		}
 	case "j", "down":
@@ -1171,17 +1181,78 @@ func (m Model) visibleIndices() []int {
 	groupName := m.selectedGroup()
 	visible := make([]int, 0, len(m.hosts))
 	for i, host := range m.hosts {
-		if sourceName != "" && host.SourceName != sourceName {
+		if query == "" {
+			if sourceName != "" && host.SourceName != sourceName {
+				continue
+			}
+			if groupName != "" && !contains(host.Groups, groupName) {
+				continue
+			}
+			visible = append(visible, i)
 			continue
 		}
-		if groupName != "" && !contains(host.Groups, groupName) {
-			continue
-		}
-		if query == "" || strings.Contains(strings.ToLower(searchText(host)), query) {
+		if matchesHostSearch(searchText(host, m.effective[host.ID]), query) {
 			visible = append(visible, i)
 		}
 	}
 	return visible
+}
+
+func (m *Model) beginGlobalSearch() {
+	if !m.searchReturnSet && strings.TrimSpace(m.filter) == "" {
+		if m.source > 0 && m.source <= len(m.sources) {
+			m.searchReturnSourceName = m.sources[m.source-1].Name
+		} else {
+			m.searchReturnGroupName = m.selectedGroup()
+		}
+		visible := m.visibleIndices()
+		if len(visible) > 0 {
+			m.searchReturnHostID = m.hosts[visible[min(m.selected, len(visible)-1)]].ID
+		}
+		m.searchReturnSet = true
+	}
+	m.source = 0
+	m.selected = 0
+	m.focus = focusHosts
+	m.filtering = true
+}
+
+func (m *Model) restoreSearchContext() {
+	m.filter = ""
+	m.filtering = false
+	if !m.searchReturnSet {
+		m.selected = 0
+		return
+	}
+	m.source = 0
+	if m.searchReturnSourceName != "" {
+		for index, source := range m.sources {
+			if source.Name == m.searchReturnSourceName {
+				m.source = index + 1
+				break
+			}
+		}
+	} else if m.searchReturnGroupName != "" {
+		for index, group := range m.groups {
+			if group == m.searchReturnGroupName {
+				m.source = len(m.sources) + index + 1
+				break
+			}
+		}
+	}
+	m.selected = 0
+	if m.searchReturnHostID != "" {
+		for position, index := range m.visibleIndices() {
+			if m.hosts[index].ID == m.searchReturnHostID {
+				m.selected = position
+				break
+			}
+		}
+	}
+	m.searchReturnSourceName = ""
+	m.searchReturnGroupName = ""
+	m.searchReturnHostID = ""
+	m.searchReturnSet = false
 }
 
 func (m Model) selectedGroup() string {
@@ -1315,6 +1386,36 @@ func targetCommand(ctx context.Context, client openssh.Client, host inventory.Ho
 	}
 }
 
-func searchText(host inventory.Host) string {
-	return fmt.Sprintf("%s %s %s %s", host.Alias, host.Name, host.SourceName, strings.Join(host.Tags, " "))
+func searchText(host inventory.Host, effective openssh.Effective) string {
+	return strings.Join([]string{
+		host.ID,
+		host.Alias,
+		host.Name,
+		host.SourceName,
+		host.Hostname,
+		host.User,
+		fmt.Sprint(host.Port),
+		host.ProxyJump,
+		strings.Join(host.Tags, " "),
+		strings.Join(host.Groups, " "),
+		string(host.TargetTransport()),
+		host.ContainerRuntime,
+		host.ContainerID,
+		host.ContainerImage,
+		host.ContainerStatus,
+		effective.Hostname,
+		effective.User,
+		effective.Port,
+		effective.ProxyJump,
+	}, " ")
+}
+
+func matchesHostSearch(haystack, query string) bool {
+	haystack = strings.ToLower(haystack)
+	for _, term := range strings.Fields(strings.ToLower(query)) {
+		if !strings.Contains(haystack, term) {
+			return false
+		}
+	}
+	return true
 }

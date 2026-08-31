@@ -66,7 +66,9 @@ script через `sh -s`. Password AskPass включается только д
 - HOSTS primary by invariant; side-pane shares и nested host name column из TOML.
 - CPU%/MEM% используют dtop-style `█/░` bars; neutral selected-row highlight не
   скрывает заполненную и свободную части шкалы.
-- Keyboard navigation: Vim keys, arrows, Home/End, panes, filter.
+- Keyboard navigation: Vim keys, arrows, Home/End and panes; `/` performs a
+  case-insensitive global multi-term host search across Sources/Groups and
+  restores the previous context on clear.
 - Context-sensitive dtop-style Enter menu.
 - External text bounded, sanitized for invalid UTF-8, controls, ANSI and length.
 - Resize-aware PTY; Preview expands temporarily and restores configured layout.
@@ -159,7 +161,7 @@ Shell fixtures запускаются в отдельной process session бе
    parsing, sanitization, scheduler, host-key atomicity, buildinfo.
 2. **Bubble Tea model/render:** реальные KeyMsg проходят `Update`; semantic View
    проверяется после ANSI stripping.
-3. **PTY E2E:** собранный binary получает реальные клавиши; проверяются filters,
+3. **PTY E2E:** собранный binary получает реальные клавиши; проверяются global search,
    editor suspend/restore, every Enter menu row, две параллельные terminal tabs,
    switch/live-close confirmation, embedded VT, exit и screenshots.
 4. **Crypto/network integration:** disposable age/SSHSIG keys и local TLS bearer

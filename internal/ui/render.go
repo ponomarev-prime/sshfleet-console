@@ -303,7 +303,7 @@ func (m Model) renderHosts(width, height int) string {
 	visible := m.visibleIndices()
 	if len(visible) == 0 {
 		if m.filter != "" {
-			return mutedStyle.Render(truncate("No hosts match /"+m.filter, width))
+			return mutedStyle.Render(truncate("No hosts match global search /"+m.filter, width))
 		}
 		return mutedStyle.Render("No hosts in this source")
 	}
@@ -324,7 +324,11 @@ func (m Model) renderHosts(width, height int) string {
 		metrics := renderHostMetrics(result, ok, layout)
 		line1 := icon + " " + padRight(truncate(session.CleanText(host.DisplayName()), layout.nameWidth), layout.nameWidth) + " " + metrics
 		line1 = padRight(truncate(line1, width), width)
-		line2 := mutedStyle.Render(truncate("  "+session.CleanText(processText(host, result, ok)), width))
+		detail := session.CleanText(processText(host, result, ok))
+		if m.filter != "" {
+			detail = "source: " + session.CleanText(host.SourceName) + " · " + detail
+		}
+		line2 := mutedStyle.Render(truncate("  "+detail, width))
 		if pos == selectedPos {
 			if m.focus == focusHosts {
 				line1 = selectedHost.Render(ansi.Strip(line1))
@@ -933,7 +937,7 @@ func overlayBlock(base, popup string, x, y, width, height int) string {
 }
 
 func (m Model) renderFooter(width int) string {
-	left := " Tab/h/l pane  j/k move  / filter  e host  c config  ? health  Enter actions  q quit "
+	left := " Tab/h/l pane  j/k move  / search  e host  c config  ? health  Enter actions  q quit "
 	if m.embedded != nil {
 		left = " PREVIEW TERMINAL  all keys go to target  Ctrl+] close "
 	} else if m.embeddedStarting {
@@ -959,7 +963,7 @@ func (m Model) renderFooter(width int) string {
 		} else if result, ok := m.results[hostID]; ok && result.Status == probe.StatusHostKey {
 			left = " Shift+K inspect host-key repair  Enter actions  q quit "
 		} else if ok && result.Status == probe.StatusGit {
-			left = " j/k move  / filter  e host  c config  r refresh  Enter actions  q quit "
+			left = " j/k move  / search  e host  c config  r refresh  Enter actions  q quit "
 		}
 	}
 	if m.selectedGroup() != "" && !m.groupCommandMenu && !m.filtering && m.groupDialog.mode == groupDialogNone {
@@ -968,9 +972,9 @@ func (m Model) renderFooter(width int) string {
 		left = " SOURCES  j/k move  n new group  Enter hosts  ? health  q quit "
 	}
 	if m.filtering {
-		left = " filter: " + m.filter + "█  Enter apply  Esc close "
+		left = " global host search: " + m.filter + "█  Enter apply  Esc close "
 	} else if m.filter != "" {
-		left = " /" + m.filter + "  Esc clear  Tab pane  Enter actions  q quit "
+		left = " global /" + m.filter + "  Esc restore  Enter actions  q quit "
 	}
 	right := ""
 	if m.active > 0 {

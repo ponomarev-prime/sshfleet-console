@@ -217,6 +217,112 @@ source = "fixture"
 	}
 }
 
+func TestTUIEndToEndGlobalHostSearchAcrossSources(t *testing.T) {
+	dir := t.TempDir()
+	fakeSSH := filepath.Join(dir, "fake-ssh")
+	primaryInventory := filepath.Join(dir, "primary.toml")
+	secondaryInventory := filepath.Join(dir, "secondary.toml")
+	configPath := filepath.Join(dir, "config.toml")
+
+	writeExecutable(t, fakeSSH, `#!/bin/sh
+alias_name=""
+for arg do alias_name="$arg"; done
+case " $* " in
+  *" -G "*)
+    printf 'hostname %s.example\nuser fixture\nport 22\n' "$alias_name"
+    exit 0
+    ;;
+esac
+exit 0
+`)
+	writeFile(t, primaryInventory, `version = 1
+
+[[hosts]]
+alias = "alpha-only"
+name = "Alpha only"
+hostname = "192.0.2.10"
+user = "root"
+tags = ["development"]
+probe = false
+`, 0o600)
+	writeFile(t, secondaryInventory, `version = 1
+
+[[hosts]]
+alias = "needle-202"
+name = "Needle Host"
+hostname = "192.0.2.77"
+user = "deploy"
+port = 2222
+tags = ["perf", "stand"]
+probe = false
+`, 0o600)
+	writeFile(t, configPath, fmt.Sprintf(`version = 1
+
+[app]
+refresh_interval = "1h"
+connect_timeout = "1s"
+max_concurrent = 2
+ssh_binary = %q
+
+[app.containers]
+enabled = false
+
+[[sources]]
+name = "primary"
+kind = "inventory"
+path = %q
+
+[[sources]]
+name = "secondary"
+kind = "inventory"
+path = %q
+`, fakeSSH, primaryInventory, secondaryInventory), 0o600)
+
+	binary := resolveE2EBinary(t, dir)
+	command := exec.Command(binary,
+		"--config", configPath,
+		"--no-user-ssh-config",
+		"--no-probe",
+		"--sources-dir", filepath.Join(dir, "sources.d"),
+		"--groups-dir", filepath.Join(dir, "groups.d"),
+		"--overrides-dir", filepath.Join(dir, "hosts.d"),
+	)
+	command.Env = append(os.Environ(), "TERM=xterm-256color")
+	terminal, err := pty.StartWithSize(command, &pty.Winsize{Rows: 30, Cols: 150})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := newPTYHarness(t, command, terminal, 150, 30)
+	defer h.close()
+
+	h.waitForScreen("Alpha only", 8*time.Second)
+	h.send("h\033[B\r")
+	h.waitForScreen("Alpha only", 3*time.Second)
+	h.waitForScreenGone("Needle Host", 3*time.Second)
+	h.screenshot("global-search-source-scope")
+
+	h.send("/deploy perf 192.0.2.77\r")
+	h.waitForScreen("Needle Host", 5*time.Second)
+	h.waitForScreen("source: secondary", 5*time.Second)
+	h.waitForScreen("global /deploy perf 192.0.2.77", 5*time.Second)
+	h.screenshot("global-search-result")
+
+	h.send("\r")
+	h.waitForScreen("ACTIONS · Needle Host", 3*time.Second)
+	h.screenshot("global-search-action-menu")
+	h.send("\033")
+	h.waitForScreenGone("ACTIONS · Needle Host", 3*time.Second)
+	h.send("\033")
+	h.waitForScreen("Alpha only", 5*time.Second)
+	h.waitForScreenGone("Needle Host", 3*time.Second)
+	h.screenshot("global-search-restored-source")
+
+	h.send("q")
+	if err := h.wait(5 * time.Second); err != nil {
+		t.Fatalf("sshfleet did not exit after global search: %v\n%s", err, h.tail(4000))
+	}
+}
+
 func TestTUIRealNeovimReceivesArrowKeys(t *testing.T) {
 	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
