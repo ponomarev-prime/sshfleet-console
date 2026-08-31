@@ -793,24 +793,37 @@ candidate через pull request. Ближайшие milestones выполня�
    зелёного CI на чистой публичной истории, проверить installation из release
    candidate и только затем запустить защищённый Release workflow. Архивные
    private tags не публикуются.
-2. **Fleet navigation completion.** Завершить `SOURCES / GROUPS / VIEWS`:
-   показывать kind/origin/state каждого source, missing и duplicate members,
-   добавить вычисляемые Views и multi-select membership. Это следующий
-   продуктовый slice: он непосредственно улучшает ежедневный путь к своим
-   серверам и остаётся read-only относительно исходных inventories.
-3. **Safe customization UX.** Реализовать validated live settings, scopes и
+2. **Fleet navigation + refresh contract.** Завершить
+   `SOURCES / GROUPS / VIEWS`: kind/origin/state, missing/duplicate members,
+   вычисляемые Views и multi-select membership. Одновременно зафиксировать
+   responsive refresh/logging UX: bounded workers, stale/backpressure states,
+   last-known data и full logs без блокировки TUI. Это ближайший ежедневный
+   пользовательский slice и он не изменяет исходные inventories.
+3. **Terminal lifecycle hardening.** До session persistence ввести единую
+   state machine `connected → disconnected/remote_exited/target_replaced`,
+   безопасный reconnect как новую session generation и общий shutdown
+   coordinator. Закрытие tab/application обязано завершать только owned process
+   groups, PTY/ConPTY, pipes, goroutines, AskPass и workspace; failure/leak
+   сценарии входят в deterministic PTY/integration regression.
+4. **Mixed Groups и container identity.** Добавить type/origin-aware group
+   plans, bounded открытие terminal tabs для mixed SSH/local/container targets
+   и явное разделение immutable runtime instance, logical selector и display
+   alias. Recreate/ambiguity/missing target никогда не перепривязывают session
+   молча. Затем добавить launch-only `Open with shell…` и отдельный private
+   container overlay для сохранённой shell preference.
+5. **Safe customization UX.** Реализовать validated live settings, scopes и
    per-host private overlay с автоматической группой `MY`; исходный
    `~/.ssh/config` и trusted source files не изменяются. После этого добавить
-   secure connection profiles и безопасный session plan restore.
-4. **Platform and workspace portability.** Закрыть platform interfaces,
-   ConPTY/native credential stores и интерактивные native acceptance; затем
-   расширять signed workspace artifacts и исследовать container bootstrap.
-5. **Source hardening, затем Web/Hub.** Offline cache, SPKI pinning и общий
-   read-only source contract должны появиться до web inventory, RBAC и любых
-   automation jobs. Foliage inventory и Dozzle lifecycle остаются отдельными
+   secure connection profiles и безопасный session plan restore поверх готовой
+   terminal lifecycle model.
+6. **Platform/workspace portability и source hardening.** Закрыть platform
+   interfaces, ConPTY/native credential stores и native interactive acceptance;
+   затем расширять signed workspace artifacts. Offline cache, SPKI pinning и
+   общий read-only source contract должны появиться до Web/Hub, RBAC и любых
+   automation jobs. Container bootstrap, Foliage и Dozzle остаются отдельными
    поздними epics с plan/approval/audit/rollback.
 
-До завершения milestone 2 не начинаем unattended multi-host execution,
+До завершения milestones 2–4 не начинаем unattended multi-host execution,
 постоянный remote agent или управляемую установку ПО. Для каждого milestone
 обязательны unit/model tests, настоящий PTY/E2E путь, privacy-safe screenshots
 и артефакты одной команды `make regression`.
@@ -910,6 +923,40 @@ local/container tabs, сохраняют screenshots и проверяют live-
    shell history из title, metadata, logs и restore state.
 4. Покрыть параллельные sessions, быстрые переключения, массовый open/close и
    отсутствие goroutine/process/PTY leaks настоящими E2E.
+
+Следующий slice terminal tabs — lifecycle, а не новая визуальная функция:
+
+1. Разделить `remote_exited`, `transport_lost`, `auth_failed`,
+   `host_key_blocked`, `target_replaced`, `closing` и `cleanup_failed`.
+2. После disconnect сохранять только bounded sanitized evidence; reconnect
+   повторно resolve-ит logical target, сверяет host key/exact container ID и
+   создаёт новую session generation без replay команд или секретов.
+3. Единый shutdown coordinator обслуживает close tab, exit приложения,
+   SIGINT/SIGTERM/hangup и Windows close event. Graceful deadline сменяется
+   hard termination только owned process tree; операция идемпотентна.
+4. Regression обязан моделировать clean exit, network loss, changed host key,
+   stopped/recreated container, AskPass/cleanup во время close, игнорирование
+   graceful signal и несколько живых tabs; после теста нет orphan process,
+   PTY/ConPTY, FD, timer или goroutine leaks.
+
+Session persistence не начинается до завершения этого lifecycle contract.
+
+### Этап 3.1 — mixed Groups и устойчивая container identity
+
+1. Group member хранит stable origin/type и строит transport-specific exact
+   plan; SSH-команда никогда не применяется к local/container target.
+2. Group terminal action открывает отдельные tabs с fan-out ceiling и
+   per-target result, но не является unattended background execution.
+3. Для контейнера различаются immutable `runtime_instance_id`, устойчивый
+   scoped `logical_identity` и пользовательский `display_alias`.
+4. Live tab всегда pin-ится к immutable ID. Recreate не перепривязывает её
+   молча; ambiguous selector блокирует действие, missing member остаётся
+   видимым stale/missing.
+5. `Open with shell…` действует на один launch. Сохранение выбора — отдельный
+   versioned private overlay после capability check; explicit missing shell не
+   получает скрытый fallback.
+6. Docker recreate, rootless Podman, mixed Group, stopped/no-shell container,
+   ambiguity и multiple tabs входят в полный regression.
 
 ### Этап 4 — remote workspace UX и portability
 
