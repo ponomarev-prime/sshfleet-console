@@ -328,7 +328,7 @@ func TestTUIRealNeovimReceivesArrowKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	nvim := filepath.Join(repoRoot, "tools", "bin", "nvim")
+	nvim := filepath.Join(repoRoot, "tools", "launchers", "nvim")
 	if info, err := os.Stat(filepath.Join(repoRoot, ".toolchain", "bin", "nvim")); err != nil || info.Mode().Perm()&0o111 == 0 {
 		var lookupErr error
 		nvim, lookupErr = exec.LookPath("nvim")

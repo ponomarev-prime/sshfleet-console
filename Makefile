@@ -186,10 +186,10 @@ test-remote-bundle: remote-bundle
 
 install-user: build
 	mkdir -p "$(USER_BIN_DIR)"
-	ln -sfn "$(CURDIR)/tools/bin/sshfleet" "$(USER_BIN_DIR)/sshfleet"
-	ln -sfn "$(CURDIR)/tools/bin/sshf" "$(USER_BIN_DIR)/sshf"
+	ln -sfn "$(CURDIR)/tools/launchers/sshfleet" "$(USER_BIN_DIR)/sshfleet"
+	ln -sfn "$(CURDIR)/tools/launchers/sshf" "$(USER_BIN_DIR)/sshf"
 	@if [ ! -e "$(USER_BIN_DIR)/sf" ] && [ ! -L "$(USER_BIN_DIR)/sf" ]; then \
-		ln -s "$(CURDIR)/tools/bin/sshfleet" "$(USER_BIN_DIR)/sf"; \
+		ln -s "$(CURDIR)/tools/launchers/sshfleet" "$(USER_BIN_DIR)/sf"; \
 	else \
 		printf '%s\n' 'SSH Fleet Console: sf already exists; optional alias was not changed'; \
 	fi

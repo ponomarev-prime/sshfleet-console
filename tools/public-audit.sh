@@ -7,6 +7,17 @@ cd "$repo_root"
 
 git diff --check
 
+tracked_tool_bin=$(git ls-files 'tools/bin/**')
+if [ -n "$tracked_tool_bin" ]; then
+    for path in $tracked_tool_bin; do
+        if [ -e "$path" ] || [ -L "$path" ]; then
+            printf '%s\n' 'public audit: generated tools/bin content is tracked; keep launcher sources in tools/launchers' >&2
+            printf '%s\n' "$tracked_tool_bin" >&2
+            exit 1
+        fi
+    done
+fi
+
 if git ls-files | grep -E '(^|/)(coverage\.out|\.env|id_(rsa|ed25519)|known_hosts|config\.toml)$' >/dev/null; then
     printf '%s\n' 'public audit: generated, secret-prone, or private config file is tracked' >&2
     git ls-files | grep -E '(^|/)(coverage\.out|\.env|id_(rsa|ed25519)|known_hosts|config\.toml)$' >&2

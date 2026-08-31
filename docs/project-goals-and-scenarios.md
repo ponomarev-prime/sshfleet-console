@@ -290,9 +290,12 @@ SSH Fleet Console — терминальный менеджер SSH-ресурс
 - Локальные эксперименты выполняются в ветках `sshfleet` внутри submodules. До
   публикации изменённый commit обязан быть отправлен в доступный remote fork,
   иначе основной репозиторий не должен ссылаться на недостижимый gitlink.
-- Общие настройки находятся в отслеживаемых `tools/config/*`. Launchers из
-  `tools/bin/*` выбирают эти настройки явно и не перезаписывают пользовательские
-  `~/.config`.
+- Общие настройки находятся в отслеживаемых `tools/config/*`. POSIX shell
+  source из `tools/launchers/*` выбирает эти настройки явно и не
+  перезаписывает пользовательские `~/.config`.
+- `tools/bin/` зарезервирован только для генерируемого/установочного layout,
+  игнорируется Git и проверяется public audit; executable shell source не
+  маскируется под build output.
 - Бинарники, Cargo/CMake build trees и установленный Neovim runtime находятся в
   `.toolchain/` и никогда не отслеживаются Git.
 - `dtop` собирается без self-update. Обновление любого инструмента — отдельное
@@ -580,7 +583,7 @@ agentless SSH navigator и не получает неограниченный у
 2. Target собирает `lf`, `dtop`, Neovim и `bat` без `sudo`, помещает результат с
    Neovim runtime в игнорируемый `.toolchain/`, затем запускает smoke и PTY/config
    verification.
-3. `tools/bin/*` запускают эти бинарники с отслеживаемыми конфигами; `batcat`
+3. `tools/launchers/*` запускают эти бинарники с отслеживаемыми конфигами; `batcat`
    остаётся совместимым алиасом для Ubuntu.
 4. `make toolchain-smoke` сверяет source URL/SHA, наличие конфигов и launchers,
    затем запускает version checks всех готовых бинарников.

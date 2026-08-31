@@ -32,7 +32,7 @@ for name in lf nvim dtop bat batcat; do
     install -m 0755 "$repo_root/tools/remote/bin/$name" "$stage/bin/$name"
 done
 for name in sshfleet-open sshfleet-editor; do
-    install -m 0755 "$repo_root/tools/bin/$name" "$stage/bin/$name"
+    install -m 0755 "$repo_root/tools/launchers/$name" "$stage/bin/$name"
 done
 install -m 0755 "$repo_root/.toolchain/bin/lf" "$stage/libexec/lf"
 install -m 0755 "$repo_root/.toolchain/bin/dtop" "$stage/libexec/dtop"
