@@ -646,7 +646,10 @@ path = %q
 	h.waitForScreen("Demo Fleet", 3*time.Second)
 	h.screenshot("groups-renamed")
 	h.send("e")
-	h.waitForScreen("Group edited", 3*time.Second)
+	// Race instrumentation can make the suspend/editor/reload round trip
+	// noticeably slower on shared hosted runners. Keep the assertion strict but
+	// give the real subprocess lifecycle the same bounded budget as startup.
+	h.waitForScreen("Group edited", 8*time.Second)
 	h.screenshot("groups-edited")
 	h.send("D")
 	h.waitForScreen("DELETE GROUP", 3*time.Second)
