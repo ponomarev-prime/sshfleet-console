@@ -7,6 +7,45 @@
 `sshf` до `v1.0.0` и создаёт короткий `sf`, только если это имя ещё не занято
 другой программой. Документация и новые scripts всегда используют `sshfleet`.
 
+## Дисклеймер и границы
+
+SSH Fleet Console — локальная клавиатурная оболочка над установленным OpenSSH,
+а не собственный SSH protocol stack, SSH-server или постоянный remote agent.
+Программа читает только явно разрешённые sources, запускает ограниченные
+read-only probes и открывает привычный OpenSSH terminal. Она не отключает
+host-key verification, не принимает изменившийся ключ автоматически и не
+хранит secret values в TOML, argv, logs или session tail.
+
+Trusted OpenSSH config является локальным кодом: `ProxyCommand`,
+`KnownHostsCommand`, `Match exec` и похожие directives могут выполнять
+программы на рабочей станции. Подключайте такой source только если доверяете
+файлу. Для переносимых и remote sources используйте restricted inventory — он
+не принимает executable directives и всегда изолируется через `ssh -F /dev/null`.
+
+## Быстрый ежедневный старт
+
+```sh
+sshfleet -v                    # какая сборка запущена
+sshfleet healthcheck          # OpenSSH, shell, editor, Secret Service, tools
+sshfleet                      # ~/.ssh/config загружается как source user
+```
+
+Если нужно сначала только увидеть resolved inventory и не подключаться:
+
+```sh
+sshfleet --no-probe --list
+```
+
+Изолированный запуск с одним тестовым OpenSSH config:
+
+```sh
+sshfleet --no-user-ssh-config --ssh-config lab=~/.ssh/lab.conf
+```
+
+В TUI нажмите `/` и введите часть alias, source, tag, target или имени группы.
+Выберите host, нажмите `Enter` и оставьте первый пункт `Open terminal tab
+(default)`. `Ctrl+D` закрывает активную terminal tab и возвращает Fleet.
+
 ## Экран
 
 Интерфейс адаптируется к ширине терминала:
@@ -370,11 +409,16 @@ impact и remediation. Обычный режим падает только бе�
 ## Диагностика
 
 ```sh
+sshfleet -v
 sshfleet --version
 sshfleet version --json
 sshfleet --no-probe --list
 sshfleet healthcheck
 ```
+
+`-v` — короткий совместимый alias `--version`; обе команды должны вывести
+одинаковую строку. `version --json` содержит полный commit, branch, channel,
+source date, clean/dirty state, Go version и platform.
 
 Source errors локализуются: недоступный host/source/tool не должен повреждать
 экран или останавливать остальные probes. Любой внешний text проходит границы

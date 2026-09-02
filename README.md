@@ -1,11 +1,24 @@
 # SSH Fleet Console
 
+[![CI](https://github.com/ponomarev-prime/sshfleet-console/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/ponomarev-prime/sshfleet-console/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/ponomarev-prime/sshfleet-console)](https://github.com/ponomarev-prime/sshfleet-console/releases/latest)
+[![License](https://img.shields.io/github/license/ponomarev-prime/sshfleet-console)](LICENSE)
+
+**Keyboard-first, agentless TUI for discovering, monitoring, grouping and opening
+OpenSSH hosts and local containers.**
+
 `sshfleet` — быстрая локальная TUI-консоль для SSH-флота: источники, группы и Views слева,
 главная таблица узлов по центру, объяснимый Preview справа.
 
 Она читает привычный OpenSSH config, параллельно и безопасно опрашивает Linux
 узлы, открывает обычный или встроенный терминал и помогает работать с десятками
 и сотнями SSH-алиасов без собственного SSH-стека.
+
+> **Важно:** это локальная операторская консоль, а не SSH-сервер, background
+> daemon или замена OpenSSH. Обычные подключения выполняет установленный
+> OpenSSH; probe ничего не устанавливает на удалённый host. README ветки `dev`
+> описывает текущую разработку, а гарантированный контракт конкретной stable
+> версии зафиксирован в её GitHub Release.
 
 > Первый публичный stable-релиз —
 > [`v0.1.0`](https://github.com/ponomarev-prime/sshfleet-console/releases/tag/v0.1.0).
@@ -45,6 +58,10 @@
 
 ![SSH Fleet Console groups](docs/assets/screenshots/groups.png)
 
+### Вычисляемый View с низким остатком памяти
+
+![SSH Fleet Console low-memory View](docs/assets/screenshots/views.png)
+
 </details>
 
 Все изображения созданы отдельным fixture-only PTY pipeline. Они не содержат
@@ -79,10 +96,30 @@
 
 ## Быстрый старт
 
-Полностью проверенный runtime сейчас — Linux. Нужны OpenSSH client и Go 1.25+
-для сборки из исходников. Core также собирается нативно на macOS и Windows;
+Полностью проверенный runtime сейчас — Linux. Для готового release нужен только
+OpenSSH client. Для сборки из исходников также нужен Go 1.25+. Core собирается
+нативно на macOS и Windows;
 healthcheck честно отключает ещё не реализованные ConPTY и native credential
 store actions, вместо Unix-эмуляции или падения всего приложения.
+
+### Готовый Linux release
+
+Скачайте архив `linux-amd64` или `linux-arm64` и `checksums.txt` со страницы
+[последнего релиза](https://github.com/ponomarev-prime/sshfleet-console/releases/latest),
+затем:
+
+```sh
+sha256sum -c --ignore-missing checksums.txt
+tar -xzf sshfleet-console-v0.1.0-linux-amd64.tar.gz
+cd sshfleet-console-v0.1.0-linux-amd64
+./install.sh --prebuilt
+sshfleet healthcheck
+sshfleet
+```
+
+Имя архива в примере замените на скачанную версию и архитектуру.
+
+### Из исходников
 
 ```sh
 git clone https://github.com/ponomarev-prime/sshfleet-console.git
@@ -102,6 +139,7 @@ sshfleet
 
 ```sh
 make install-user
+sshfleet -v
 sshfleet --version
 sshfleet
 ```
@@ -335,10 +373,15 @@ SSH Fleet Console не реализует SSH и не обходит прове�
 ## Версии и релизы
 
 ```sh
+sshfleet -v
 sshfleet --version
 sshfleet version
 sshfleet version --json
 ```
+
+`-v` и `--version` эквивалентны и печатают одну компактную строку. Subcommand
+`version` показывает полную provenance, а `version --json` предназначен для
+автоматизации и bug reports.
 
 Development build выглядит как `dev-14061d49c195`; суффикс `+dirty` означает,
 что в бинарь попали незакоммиченные изменения. Stable release использует строгий

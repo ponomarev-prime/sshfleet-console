@@ -56,11 +56,12 @@ test-public-screenshots:
 	rm -rf .artifacts/public-screenshots
 	mkdir -p .artifacts/public-screenshots
 	SSHF_PUBLIC_SCREENSHOTS=1 SSHF_SCREENSHOT_DIR="$(CURDIR)/.artifacts/public-screenshots" \
-		go test -v ./cmd/sshf -run 'TestTUIEndToEnd(ScreenshotsAndActionMenuTraversal|GroupsCRUDAndMembership)|TestPublicScreenshotSanitizer' -count=1
+		go test -v ./cmd/sshf -run 'TestTUIEndToEnd(ScreenshotsAndActionMenuTraversal|ComputedViews|GroupsCRUDAndMembership)|TestPublicScreenshotSanitizer' -count=1
 	magick compare -metric AE .artifacts/public-screenshots/wide-fleet.png docs/assets/screenshots/fleet-overview.png null:
 	magick compare -metric AE .artifacts/public-screenshots/wide-menu-1.png docs/assets/screenshots/host-actions.png null:
 	magick compare -metric AE .artifacts/public-screenshots/wide-terminal-tabs-completed.png docs/assets/screenshots/terminal-tabs.png null:
 	magick compare -metric AE .artifacts/public-screenshots/groups-two-members.png docs/assets/screenshots/groups.png null:
+	magick compare -metric AE .artifacts/public-screenshots/views-low-memory-filtered.png docs/assets/screenshots/views.png null:
 
 test-installed-launcher: build
 	tools/test-installed-launcher.sh

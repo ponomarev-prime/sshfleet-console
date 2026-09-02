@@ -13,11 +13,13 @@
 
 До `v1.0.0` API считается развивающимся. Политика SSH Fleet Console: `MINOR`
 может содержать заметные продуктовые изменения, `PATCH` оставлен для fixes и
-security. Первый планируемый public release — `v0.1.0`.
+security. Первый public release `v0.1.0` опубликован 2026-08-31.
 
 Stable release tag должен быть строго `vX.Y.Z`. `dev-14061d49c195` — не SemVer
 release, а provenance development build: branch/channel + 12-symbol commit SHA.
-`+dirty` означает незакоммиченные source changes.
+`+dirty` означает незакоммиченные source changes. `sshfleet -v` и
+`sshfleet --version` печатают одинаковую компактную provenance-строку;
+`sshfleet version --json` возвращает полный машинно-читаемый набор полей.
 
 ## SSH Fleet
 

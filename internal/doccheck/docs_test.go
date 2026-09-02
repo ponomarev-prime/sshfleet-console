@@ -96,7 +96,7 @@ func TestConfigurationReferenceTracksPublicFlagsAndFields(t *testing.T) {
 		"--config", "--editor", "--inventory", "--list", "--max-concurrent",
 		"--no-default-ssh-config", "--no-probe", "--no-user-ssh-config",
 		"--overrides-dir", "--probe", "--refresh-interval", "--sources-dir", "--groups-dir",
-		"--shell", "--shell-arg", "--ssh-config", "--user-ssh-config", "--version",
+		"--shell", "--shell-arg", "--ssh-config", "--user-ssh-config", "`-v`", "--version",
 	}
 	fields := []string{
 		"refresh_interval", "connect_timeout", "max_concurrent", "ssh_binary",

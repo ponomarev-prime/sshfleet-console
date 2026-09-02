@@ -135,6 +135,7 @@ func main() {
 	flag.IntVar(&maxConcurrent, "max-concurrent", 0, "maximum simultaneous probes (default: 2 x available CPU cores)")
 	flag.DurationVar(&refreshInterval, "refresh-interval", 0, "probe refresh interval (default: 10s)")
 	flag.BoolVar(&listOnly, "list", false, "list discovered hosts and exit")
+	flag.BoolVar(&showVersion, "v", false, "print version and exit (shorthand for --version)")
 	flag.BoolVar(&showVersion, "version", false, "print version and exit")
 	flag.Parse()
 

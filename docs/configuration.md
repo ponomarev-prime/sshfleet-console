@@ -63,7 +63,7 @@ application config в platform user-config directory. Точный group path м
 | `--max-concurrent N` | simultaneous probe ceiling |
 | `--refresh-interval DURATION` | probe interval, например `5s` |
 | `--list` | вывести resolved inventory и завершиться |
-| `--version` | короткая build version |
+| `-v`, `--version` | короткая build version; формы эквивалентны |
 | `version [--json]` | полная provenance |
 | `healthcheck [--strict]` | capabilities; aliases `doctor`, `checkhealth` |
 | `source add ...` | persistent source wizard/non-interactive add |
@@ -109,6 +109,7 @@ string values можно безопасно ввести в wizard prompts, но
   terminal echo, очищает buffers после использования и требует declared entry.
 - `sshfleet healthcheck [--config PATH] [--shell EXECUTABLE] [--shell-arg VALUE] [--strict]`; aliases: `doctor`,
   `checkhealth`. Strict возвращает non-zero и для missing optional capabilities.
+- `sshfleet -v` и `sshfleet --version` печатают одну компактную строку.
 - `sshfleet version [--json]` не обращается к Git: provenance уже в binary.
 
 ## Глобальный `[terminal]`

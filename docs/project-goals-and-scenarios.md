@@ -809,7 +809,11 @@ candidate через pull request. Ближайшие milestones выполня�
    rulesets/security включены; protected workflow выполнил полный regression,
    public-history audit, reproducible packaging, ручное environment approval и
    опубликовал immutable tag/release на commit `e9d40dc9694e316ddc1b761e343cfde9271b8d40`.
-   Скачанные release assets независимо прошли `sha256sum -c`.
+   Скачанные release assets независимо прошли `sha256sum -c`. Публичная
+   витрина актуализирована 2026-09-02: добавлены понятные GitHub description и
+   topics, release/CI/license badges, безопасный быстрый старт и пятый
+   fixture-only PTY screenshot для Views. Короткий `sshfleet -v` закреплён как
+   эквивалент `sshfleet --version`.
 2. **Fleet navigation + refresh contract.** Built-in read-only Views завершены
    2026-08-31; продолжить `SOURCES / GROUPS / VIEWS`: kind/origin/state,
    missing/duplicate members и multi-select membership. Одновременно зафиксировать

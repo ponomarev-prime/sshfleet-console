@@ -134,7 +134,7 @@ mounts, networks и ports. Runtime sources имеют отдельные сос�
 
 ## Версии и доставка
 
-- `--version`, human `version`, machine-readable `version --json`.
+- Equivalent `-v`/`--version`, human `version`, machine-readable `version --json`.
 - Dev provenance: branch + 12-char SHA + optional `+dirty` + source date.
 - Stable version: strict `vMAJOR.MINOR.PATCH`, main only, clean tree.
 - Release workflow separates verify and publish jobs; exact SHA regression,
