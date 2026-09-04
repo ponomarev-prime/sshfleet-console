@@ -1164,12 +1164,34 @@ func TestTerminalTabsOpenSwitchRenderAndKeepFleet(t *testing.T) {
 	}
 
 	m = updateWithKey(t, m, tea.Key{Code: 'g', Mod: tea.ModCtrl})
-	if m.activeTab != 0 || !strings.Contains(ansi.Strip(m.View().Content), "HOSTS") {
-		t.Fatalf("Ctrl+G did not return Fleet: active=%d\n%s", m.activeTab, ansi.Strip(m.View().Content))
+	if m.activeTab != 0 || !m.tabSelectMode || !strings.Contains(ansi.Strip(m.View().Content), "TAB SELECT  1…2 choose") {
+		t.Fatalf("Ctrl+G did not enter Fleet tab selection: active=%d mode=%v\n%s", m.activeTab, m.tabSelectMode, ansi.Strip(m.View().Content))
+	}
+	m = updateWithKey(t, m, tea.Key{Text: "9", Code: '9'})
+	if m.activeTab != 0 || !m.tabSelectMode || !strings.Contains(m.message, "Tab 9 is not open") {
+		t.Fatalf("invalid tab slot escaped selection mode: active=%d mode=%v message=%q", m.activeTab, m.tabSelectMode, m.message)
+	}
+	m = updateWithKey(t, m, tea.Key{Code: tea.KeyEsc})
+	if m.activeTab != 0 || m.tabSelectMode {
+		t.Fatalf("Esc did not cancel tab selection: active=%d mode=%v", m.activeTab, m.tabSelectMode)
+	}
+	m = updateWithKey(t, m, tea.Key{Text: "2", Code: '2'})
+	if m.activeTab != 0 {
+		t.Fatalf("plain digit switched tabs outside selection mode: active=%d", m.activeTab)
 	}
 	m = updateWithKey(t, m, tea.Key{Code: 'n', Mod: tea.ModCtrl})
 	if m.activeTab != 1 {
 		t.Fatalf("Ctrl+N active tab = %d", m.activeTab)
+	}
+	m = updateWithKey(t, m, tea.Key{Code: 'g', Mod: tea.ModCtrl})
+	m = updateWithKey(t, m, tea.Key{Text: "1", Code: '1'})
+	if m.activeTab != 0 {
+		t.Fatalf("Ctrl+G then 1 active tab = %d", m.activeTab)
+	}
+	m = updateWithKey(t, m, tea.Key{Code: 'g', Mod: tea.ModCtrl})
+	m = updateWithKey(t, m, tea.Key{Text: "2", Code: '2'})
+	if m.activeTab != 1 || m.tabSelectMode {
+		t.Fatalf("Ctrl+G then 2 active tab = %d mode=%v", m.activeTab, m.tabSelectMode)
 	}
 	m = updateWithKey(t, m, tea.Key{Code: 'p', Mod: tea.ModCtrl})
 	if m.activeTab != 0 {

@@ -80,6 +80,7 @@ type Model struct {
 	embeddedClosing        bool
 	tabs                   []terminalTab
 	activeTab              int // 0 is the permanent Fleet tab; N maps to tabs[N-1].
+	tabSelectMode          bool
 	nextTabID              uint64
 	quitTabsConfirm        bool
 	quitAfterTabsClose     bool
@@ -696,6 +697,9 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if m.tabSelectMode {
+		return m.handleTabSelectKey(msg)
+	}
 	if m.activeTab > 0 {
 		return m.handleTerminalTabKey(msg)
 	}
@@ -730,8 +734,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case "ctrl+p":
 			return m.activatePreviousTab(), nil
 		case "ctrl+g":
-			m.activeTab = 0
-			return m, nil
+			return m.beginTabSelection(), nil
 		}
 	}
 	if m.healthVisible {

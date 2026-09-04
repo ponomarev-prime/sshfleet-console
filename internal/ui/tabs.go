@@ -96,6 +96,7 @@ func (m Model) openTerminalTab(cmd *exec.Cmd, hostIndex int, label string, inter
 	}
 	m.tabs = append(m.tabs, tab)
 	m.activeTab = len(m.tabs)
+	m.tabSelectMode = false
 	m.quitTabsConfirm = false
 	width, height := m.fullTerminalDimensions()
 	return m, startTerminalTabCmd(tab.id, cmd, width, height, m.terminalScrollbackLines)
@@ -287,9 +288,7 @@ func (m Model) handleTerminalTabKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, closeTerminalTabCmd(id, ptySession)
 	case "ctrl+g":
 		tab.closePrompt = false
-		m.activeTab = 0
-		m.message = "Fleet tab"
-		return m, nil
+		return m.beginTabSelection(), nil
 	case "ctrl+n":
 		tab.closePrompt = false
 		return m.activateNextTab(), nil
@@ -401,8 +400,9 @@ func directTabIndex(msg tea.KeyPressMsg) (int, bool) {
 	if key.Code < '1' || key.Code > '9' {
 		return 0, false
 	}
-	// Ctrl+digit needs modifyOtherKeys/Kitty keyboard support and may be
-	// reserved by the outer terminal. Alt+digit is the portable fallback.
+	// Both forms are compatibility shortcuts only: terminal emulators may
+	// reserve Alt+digit, while Ctrl+digit needs an extended keyboard protocol.
+	// Ctrl+G followed by an unmodified digit is the reliable application path.
 	if key.Mod != tea.ModCtrl && key.Mod != tea.ModAlt {
 		return 0, false
 	}
@@ -415,6 +415,7 @@ func (m Model) activateDirectTab(msg tea.KeyPressMsg) (Model, bool) {
 		return m, false
 	}
 	m.activeTab = index
+	m.tabSelectMode = false
 	m.quitTabsConfirm = false
 	if index == 0 {
 		m.message = "Fleet tab"
@@ -424,7 +425,49 @@ func (m Model) activateDirectTab(msg tea.KeyPressMsg) (Model, bool) {
 	return m, true
 }
 
+func (m Model) beginTabSelection() Model {
+	m.activeTab = 0
+	m.quitTabsConfirm = false
+	if len(m.tabs) == 0 {
+		m.tabSelectMode = false
+		m.message = "Fleet tab · no terminal tabs are open"
+		return m
+	}
+	m.tabSelectMode = true
+	m.message = ""
+	return m
+}
+
+func (m Model) handleTabSelectKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	key := msg.Key()
+	if key.Mod == 0 && key.Code >= '1' && key.Code <= '9' {
+		index := int(key.Code - '1')
+		if index > len(m.tabs) {
+			m.message = fmt.Sprintf("Tab %d is not open · choose 1…%d or Esc", index+1, min(9, len(m.tabs)+1))
+			return m, nil
+		}
+		m.activeTab = index
+		m.tabSelectMode = false
+		m.quitTabsConfirm = false
+		if index == 0 {
+			m.message = "Fleet tab"
+		} else {
+			m.message = fmt.Sprintf("Terminal tab %d", index+1)
+		}
+		return m, nil
+	}
+	if msg.String() == "esc" || msg.String() == "ctrl+g" {
+		m.tabSelectMode = false
+		m.message = "Tab selection cancelled"
+		return m, nil
+	}
+	m.tabSelectMode = false
+	m.message = "Tab selection cancelled · press Ctrl+G, then 1…9"
+	return m, nil
+}
+
 func (m Model) activateNextTab() Model {
+	m.tabSelectMode = false
 	if len(m.tabs) == 0 {
 		m.activeTab = 0
 		return m
@@ -438,6 +481,7 @@ func (m Model) activateNextTab() Model {
 }
 
 func (m Model) activatePreviousTab() Model {
+	m.tabSelectMode = false
 	if len(m.tabs) == 0 {
 		m.activeTab = 0
 		return m
@@ -451,6 +495,7 @@ func (m Model) activatePreviousTab() Model {
 }
 
 func (m Model) requestQuit() (tea.Model, tea.Cmd) {
+	m.tabSelectMode = false
 	live := false
 	for index := range m.tabs {
 		if m.tabs[index].session != nil || m.tabs[index].state == terminalTabStarting {
@@ -587,7 +632,7 @@ func (m Model) renderActiveTerminalTab(width, height int) string {
 }
 
 func (m Model) renderTerminalTabFooter(width int) string {
-	left := " TAB  Alt+1…9 select  Ctrl+N/P cycle  Ctrl+D close "
+	left := " TAB  Ctrl+G, then 1…9 select  Ctrl+N/P cycle  Ctrl+D close "
 	if index := m.activeTab - 1; index >= 0 && index < len(m.tabs) && m.tabs[index].scrollOffset > 0 {
 		available := len(m.tabs[index].scrollback)
 		if m.tabs[index].session != nil && m.tabs[index].state == terminalTabRunning {

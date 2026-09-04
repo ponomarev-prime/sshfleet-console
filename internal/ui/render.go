@@ -961,7 +961,9 @@ func overlayBlock(base, popup string, x, y, width, height int) string {
 
 func (m Model) renderFooter(width int) string {
 	left := " Tab/h/l pane  j/k move  / search  e host  c config  ? health  Enter actions  q quit "
-	if m.embedded != nil {
+	if m.tabSelectMode {
+		left = fmt.Sprintf(" TAB SELECT  1…%d choose  Esc cancel ", min(9, len(m.tabs)+1))
+	} else if m.embedded != nil {
 		left = " PREVIEW TERMINAL  all keys go to target  Ctrl+] close "
 	} else if m.embeddedStarting {
 		left = " PREVIEW TERMINAL  starting…  Ctrl+C quit "
@@ -989,17 +991,19 @@ func (m Model) renderFooter(width int) string {
 			left = " j/k move  / search  e host  c config  r refresh  Enter actions  q quit "
 		}
 	}
-	if m.selectedGroup() != "" && !m.groupCommandMenu && !m.filtering && m.groupDialog.mode == groupDialogNone {
-		left = " GROUP " + m.selectedGroup() + "  x command  R rename  D delete  e edit  Enter hosts "
-	} else if view, ok := m.selectedView(); ok && !m.filtering && m.groupDialog.mode == groupDialogNone {
-		left = " VIEW " + view.name + "  Enter hosts  / search  r refresh  q quit "
-	} else if m.focus == focusSources && m.groupDialog.mode == groupDialogNone {
-		left = " SOURCES  j/k move  n new group  Enter hosts  ? health  q quit "
-	}
-	if m.filtering {
-		left = " global host search: " + m.filter + "█  Enter apply  Esc close "
-	} else if m.filter != "" {
-		left = " global /" + m.filter + "  Esc restore  Enter actions  q quit "
+	if !m.tabSelectMode {
+		if m.selectedGroup() != "" && !m.groupCommandMenu && !m.filtering && m.groupDialog.mode == groupDialogNone {
+			left = " GROUP " + m.selectedGroup() + "  x command  R rename  D delete  e edit  Enter hosts "
+		} else if view, ok := m.selectedView(); ok && !m.filtering && m.groupDialog.mode == groupDialogNone {
+			left = " VIEW " + view.name + "  Enter hosts  / search  r refresh  q quit "
+		} else if m.focus == focusSources && m.groupDialog.mode == groupDialogNone {
+			left = " SOURCES  j/k move  n new group  Enter hosts  ? health  q quit "
+		}
+		if m.filtering {
+			left = " global host search: " + m.filter + "█  Enter apply  Esc close "
+		} else if m.filter != "" {
+			left = " global /" + m.filter + "  Esc restore  Enter actions  q quit "
+		}
 	}
 	right := ""
 	if m.active > 0 {

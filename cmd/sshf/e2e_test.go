@@ -606,12 +606,15 @@ max_concurrent = 2
 			// nor become a Fleet hotkey while the terminal tab is active.
 			h.send("q")
 			h.waitForScreen("› 2:SSH · alpha", 3*time.Second)
-			h.send("\0331") // Alt+1: permanent Fleet tab.
+			h.send("\a") // Ctrl+G: Fleet plus conflict-free tab selection mode.
+			h.waitForScreen("TAB SELECT", 3*time.Second)
+			h.screenshot(size.name + "-terminal-tab-select")
+			h.send("1")
 			h.waitForScreen("› 1:Fleet", 5*time.Second)
 			h.send("\r\r")
 			h.waitForScreen("3:SSH · alpha", 5*time.Second)
 			h.screenshot(size.name + "-terminal-tab-2")
-			h.send("\0332") // Alt+2: first terminal tab.
+			h.send("\a2") // Ctrl+G, then 2: first terminal tab.
 			h.waitForScreen("› 2:SSH · alpha", 5*time.Second)
 			// A real outer bracketed paste must cross Bubble Tea as one PasteMsg
 			// and reach the nested PTY without becoming SSH Fleet hotkeys.
@@ -619,7 +622,7 @@ max_concurrent = 2
 			h.waitForScreen("qfirst-tab-exit", 5*time.Second)
 			h.waitForScreen("› 1:Fleet", 5*time.Second)
 			h.screenshot(size.name + "-terminal-tab-paste")
-			h.send("\0333") // Alt+3: second terminal tab.
+			h.send("\a3") // Ctrl+G, then 3: second terminal tab.
 			h.waitForScreen("› 3:SSH · alpha", 5*time.Second)
 			h.send("second-tab-exit\r")
 			h.waitForScreen("second-tab-exit", 5*time.Second)

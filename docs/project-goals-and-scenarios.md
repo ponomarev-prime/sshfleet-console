@@ -474,9 +474,11 @@ agentless SSH navigator и не получает неограниченный у
 ### E. SSH terminal tab
 
 1. Постоянная Fleet tab остаётся доступна, а OpenSSH получает независимый PTY.
-2. Нумерация начинается с `1:Fleet`; основной `Alt+1…9` или дополнительный
-   `Ctrl+1…9` выбирает слот напрямую, `Ctrl+N`/`Ctrl+P` циклически переключают
-   сессии, `Ctrl+G` возвращает Fleet.
+2. Нумерация начинается с `1:Fleet`; основной бесконфликтный путь — `Ctrl+G`,
+   затем обычная `1…9`: приложение сразу возвращает Fleet, показывает
+   `TAB SELECT`, а цифра выбирает слот. `Esc` отменяет режим, `Ctrl+N`/`Ctrl+P`
+   циклически переключают сессии. `Alt+1…9` и `Ctrl+1…9` — только
+   terminal-dependent compatibility shortcuts.
 3. Normal exit активной сессии автоматически возвращает во Fleet, сохраняя
    final screen и явный `✓` в завершённой вкладке; `Ctrl+]` закрывает finished tab.
 4. Живой foreground process закрывается только повторным `Ctrl+]`; `Esc` отменяет.
@@ -940,8 +942,8 @@ membership и явное отображение missing members/duplicate aliase
 **Завершён 2026-08-30 для Unix PTY; native ConPTY остаётся в cross-platform
 foundation.** Постоянная Fleet tab и несколько SSH/local/container/workspace/log
 tabs имеют независимые PTY/VT, resize, running/exited/error state, bounded tail,
-основной прямой выбор `Alt+1…9` с optional `Ctrl+1…9`, переключение
-`Ctrl+N/P`, возврат `Ctrl+G`,
+бесконфликтный прямой выбор `Ctrl+G` → обычная `1…9` с видимым режимом и
+отменой, optional compatibility `Alt+1…9`/`Ctrl+1…9`, переключение `Ctrl+N/P`,
 немедленное локальное закрытие `Ctrl+D`, автовозврат во Fleet после завершения
 активной сессии, terminal-local `q`,
 bracketed paste passthrough и подтверждаемое закрытие `Ctrl+]`.
