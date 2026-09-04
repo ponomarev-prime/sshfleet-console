@@ -1193,6 +1193,48 @@ func TestTerminalTabsOpenSwitchRenderAndKeepFleet(t *testing.T) {
 	}
 }
 
+func TestTerminalTabMouseWheelUsesBoundedLocalScrollback(t *testing.T) {
+	m := New(nil, nil, openssh.Client{}, time.Minute, 2, WithTerminalConfig(config.TerminalConfig{ScrollbackLines: 7}))
+	m.width, m.height = 80, 10
+	opened, start := m.openTerminalTab(exec.Command("sh", "-c", "sleep 30"), -1, "Local shell", false)
+	m = opened.(Model)
+	started := start().(terminalTabStartedMsg)
+	if started.err != nil {
+		t.Fatal(started.err)
+	}
+	defer func() { _ = started.session.Close() }()
+	updated, _ := m.Update(started)
+	m = updated.(Model)
+	for i := 1; i <= 30; i++ {
+		_, _ = m.tabs[0].session.Terminal.Write([]byte(fmt.Sprintf("line-%02d\r\n", i)))
+	}
+	if got := m.tabs[0].session.Terminal.Scrollback().MaxLines(); got != 7 {
+		t.Fatalf("terminal scrollback limit = %d, want 7", got)
+	}
+	if got := m.tabs[0].session.Terminal.ScrollbackLen(); got != 7 {
+		t.Fatalf("retained scrollback = %d, want 7", got)
+	}
+	if got := m.View().MouseMode; got != tea.MouseModeCellMotion {
+		t.Fatalf("terminal mouse mode = %v", got)
+	}
+
+	updated, cmd := m.Update(tea.MouseWheelMsg{Button: tea.MouseWheelUp})
+	m = updated.(Model)
+	if cmd != nil || m.tabs[0].scrollOffset != terminalWheelLines {
+		t.Fatalf("wheel up = offset:%d cmd:%v", m.tabs[0].scrollOffset, cmd != nil)
+	}
+	view := ansi.Strip(m.View().Content)
+	if !strings.Contains(view, "SCROLL 3/7") || !strings.Contains(view, "line-") {
+		t.Fatalf("scrolled terminal view:\n%s", view)
+	}
+
+	updated, _ = m.Update(tea.MouseWheelMsg{Button: tea.MouseWheelDown})
+	m = updated.(Model)
+	if m.tabs[0].scrollOffset != 0 || strings.Contains(ansi.Strip(m.View().Content), "SCROLL ") {
+		t.Fatalf("wheel down did not return live: offset=%d\n%s", m.tabs[0].scrollOffset, ansi.Strip(m.View().Content))
+	}
+}
+
 func TestTerminalTabCloseRequiresConfirmationAndStopsPTY(t *testing.T) {
 	m := New([]inventory.Host{{ID: "one:alpha", Alias: "alpha", SourceName: "one"}}, nil, openssh.Client{}, time.Minute, 2)
 	m.width, m.height = 100, 20

@@ -118,6 +118,7 @@ string values можно безопасно ввести в wizard prompts, но
 [terminal]
 default_shell = "auto"
 shell_args = []
+scrollback_lines = 10000
 ```
 
 Это оболочка только локальной рабочей станции. Она не меняет shell удалённого
@@ -135,6 +136,12 @@ application TOML → OS auto-detection. Linux/macOS auto сначала пров
 `shell_args` — массив argv, не строка shell-кода. Unicode и пробелы внутри
 отдельного аргумента сохраняются. Путь executable с пробелами допустим как
 явный path; `default_shell = "sh -c"` отклоняется строгой схемой.
+
+`scrollback_lines` задаёт число строк корректного VT-scrollback отдельно для
+каждой terminal tab. Допустимо `1..100000`, значение по умолчанию — `10000`.
+Это ограниченный буфер только в памяти процесса: он не сохраняется в config,
+session restore, logs или artifacts и удаляется при закрытии вкладки. Настройка
+не относится к короткому `LAST SESSION` в Preview, у которого отдельный лимит.
 
 CLI smoke без пользовательского SSH config:
 

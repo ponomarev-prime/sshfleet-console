@@ -49,6 +49,7 @@ func (m Model) View() tea.View {
 		content := m.renderTabStrip(width) + "\n" + m.renderActiveTerminalTab(width, bodyHeight)
 		v := tea.NewView(content + "\n" + m.renderTerminalTabFooter(width))
 		v.AltScreen = true
+		v.MouseMode = tea.MouseModeCellMotion
 		v.WindowTitle = "SSH Fleet Console · terminal tab"
 		return v
 	}
@@ -102,6 +103,7 @@ func (m Model) View() tea.View {
 
 	v := tea.NewView(m.renderTabStrip(width) + "\n" + content + "\n" + m.renderFooter(width))
 	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
 	v.WindowTitle = "SSH Fleet Console"
 	return v
 }

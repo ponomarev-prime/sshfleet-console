@@ -488,6 +488,10 @@ agentless SSH navigator и не получает неограниченный у
 8. `Ctrl+D` — явное локальное быстрое закрытие: активная вкладка удаляется и
    Fleet показывается до ожидания остановки PTY; это не зависит от обработки EOF
    вложенным shell/TUI.
+9. Колесо мыши листает локальный VT-scrollback, не превращаясь в remote `↑/↓`;
+   footer показывает позицию, wheel down или начало ввода возвращают live-экран.
+   Размер отдельного RAM ring-buffer задаёт `[terminal].scrollback_lines` в
+   диапазоне `1..100000`, по умолчанию `10000`; содержимое не персистится.
 
 ### F. SSH внутри Preview
 
@@ -749,6 +753,9 @@ agentless SSH navigator и не получает неограниченный у
    не влияет на остальные, а disconnected/error/exit code остаются видимы.
 4. Tab metadata не содержит passwords, passphrases, private keys, tokens или
    shell history; restore допускает только безопасный non-secret context.
+5. Каждая tab имеет собственный bounded VT-scrollback; wheel управляет локальным
+   viewport и не отправляет shell-history keys. Scrollback живёт только в RAM,
+   не входит в metadata/restore/artifacts и уничтожается при закрытии tab.
 
 ## Правила безопасного поведения
 

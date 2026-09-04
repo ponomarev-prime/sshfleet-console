@@ -81,7 +81,7 @@ script через `sh -s`. Password AskPass включается только д
 
 | Действие | Поведение |
 |---|---|
-| Terminal tabs | numbered permanent Fleet + independent SSH/local/container PTY tabs; primary direct `Alt+1…9` plus optional `Ctrl+1…9`, cyclic `Ctrl+N/P`, `Ctrl+G`, immediate local `Ctrl+D` close, auto-return to Fleet after active session exit, terminal-local `q`, confirmed `Ctrl+]` close; bracketed paste is forwarded as one nested-PTY event; installed-launcher PTY regression rejects the legacy foreground banner |
+| Terminal tabs | numbered permanent Fleet + independent SSH/local/container PTY tabs; primary direct `Alt+1…9` plus optional `Ctrl+1…9`, cyclic `Ctrl+N/P`, `Ctrl+G`, immediate local `Ctrl+D` close, auto-return to Fleet after active session exit, terminal-local `q`, confirmed `Ctrl+]` close; bracketed paste is forwarded as one nested-PTY event; wheel browses configurable bounded per-tab VT scrollback instead of remote shell history; installed-launcher PTY regression rejects the legacy foreground banner |
 | Preview terminal | embedded real PTY + VT, resize, `Ctrl+]` return |
 | Last session | max 12 printable lines, 128 KiB in-memory capture, never persisted |
 | Git check | `ssh -T`, no Linux probe/shell assumption |

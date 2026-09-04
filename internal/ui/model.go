@@ -32,14 +32,15 @@ const (
 )
 
 type Model struct {
-	hosts           []inventory.Host
-	sources         []inventory.SourceSummary
-	client          openssh.Client
-	refreshInterval time.Duration
-	maxConcurrent   int
-	sourcesWidthPct int
-	previewWidthPct int
-	hostColumnPct   int
+	hosts                   []inventory.Host
+	sources                 []inventory.SourceSummary
+	client                  openssh.Client
+	refreshInterval         time.Duration
+	maxConcurrent           int
+	sourcesWidthPct         int
+	previewWidthPct         int
+	hostColumnPct           int
+	terminalScrollbackLines int
 
 	width                  int
 	height                 int
@@ -216,6 +217,14 @@ func WithUILayout(layout config.UIConfig) Option {
 	}
 }
 
+func WithTerminalConfig(terminal config.TerminalConfig) Option {
+	return func(m *Model) {
+		if terminal.ScrollbackLines > 0 {
+			m.terminalScrollbackLines = terminal.ScrollbackLines
+		}
+	}
+}
+
 func WithHealth(health []toolcheck.Result, editor toolcheck.Result) Option {
 	return func(m *Model) {
 		m.health = append([]toolcheck.Result(nil), health...)
@@ -256,24 +265,25 @@ func New(hosts []inventory.Host, sources []inventory.SourceSummary, client opens
 		maxConcurrent = config.DefaultMaxConcurrent()
 	}
 	m := Model{
-		hosts:           hosts,
-		sources:         sources,
-		client:          client,
-		refreshInterval: refresh,
-		maxConcurrent:   maxConcurrent,
-		sourcesWidthPct: config.DefaultSourcesWidthPercent,
-		previewWidthPct: config.DefaultPreviewWidthPercent,
-		hostColumnPct:   config.DefaultHostColumnPercent,
-		focus:           focusHosts,
-		results:         make(map[string]probe.Result),
-		effective:       make(map[string]openssh.Effective),
-		polling:         make(map[string]bool),
-		sessionTail:     make(map[string][]string),
-		hostKeyIndex:    -1,
-		hostKeyBackup:   make(map[string]string),
-		hostKeyPrompt:   make(map[string]bool),
-		groupResults:    make(map[string]groupCommandResult),
-		views:           defaultFleetViews(),
+		hosts:                   hosts,
+		sources:                 sources,
+		client:                  client,
+		refreshInterval:         refresh,
+		maxConcurrent:           maxConcurrent,
+		sourcesWidthPct:         config.DefaultSourcesWidthPercent,
+		previewWidthPct:         config.DefaultPreviewWidthPercent,
+		hostColumnPct:           config.DefaultHostColumnPercent,
+		terminalScrollbackLines: config.DefaultTerminalScrollbackLines,
+		focus:                   focusHosts,
+		results:                 make(map[string]probe.Result),
+		effective:               make(map[string]openssh.Effective),
+		polling:                 make(map[string]bool),
+		sessionTail:             make(map[string][]string),
+		hostKeyIndex:            -1,
+		hostKeyBackup:           make(map[string]string),
+		hostKeyPrompt:           make(map[string]bool),
+		groupResults:            make(map[string]groupCommandResult),
+		views:                   defaultFleetViews(),
 	}
 	for _, option := range options {
 		option(&m)
@@ -675,6 +685,9 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.PasteMsg:
 		return m.handlePaste(msg)
+
+	case tea.MouseWheelMsg:
+		return m.handleMouseWheel(msg)
 
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)

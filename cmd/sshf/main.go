@@ -333,6 +333,7 @@ func main() {
 		ui.WithHostEditor(overridesDir, editor, buildInventory),
 		ui.WithAppConfigEditor(usedPath),
 		ui.WithUILayout(cfg.App.UI),
+		ui.WithTerminalConfig(cfg.Terminal),
 		ui.WithHealth(health, editorResult),
 		ui.WithGroupsAndCommands(cfg.Groups, cfg.Commands),
 		ui.WithGroupEditor(groupsDir, editor, reloadGroups),

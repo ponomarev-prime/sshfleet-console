@@ -981,6 +981,11 @@ func TestTUIEndToEndTrustedLocalConfigMenuAndPreview(t *testing.T) {
 	configPath := filepath.Join(dir, "config.toml")
 	binary := filepath.Join(dir, "sshf")
 	writeExecutable(t, localShell, `#!/bin/sh
+index=1
+while [ "$index" -le 40 ]; do
+  printf 'scrollback-line-%02d\n' "$index"
+  index=$((index + 1))
+done
 printf 'local-shell-ready\n'
 IFS= read -r input
 printf 'local:%s\n' "$input"
@@ -996,6 +1001,7 @@ working_directory = %q
 [terminal]
 default_shell = %q
 shell_args = ["global arg with spaces"]
+scrollback_lines = 12
 [app]
 refresh_interval = "1h"
 probe_enabled = false
@@ -1033,6 +1039,12 @@ enabled = false
 	h.waitForScreen("local-shell-ready", 5*time.Second)
 	h.waitForScreen("2:Local shell", 5*time.Second)
 	h.screenshot("local-terminal-tab")
+	// Bubble Tea enables SGR mouse reporting. This is one real wheel-up event;
+	// it must browse SSH Fleet's local VT scrollback instead of reaching the
+	// child shell as an Up key and changing command history.
+	h.send("\x1b[<64;20;10M")
+	h.waitForScreen("SCROLL 3/12", 5*time.Second)
+	h.screenshot("local-terminal-tab-scrollback")
 	h.send("local-tab-exit\r")
 	h.waitForScreen("local:local-tab-exit", 5*time.Second)
 	h.waitForScreen("› 1:Fleet", 5*time.Second)

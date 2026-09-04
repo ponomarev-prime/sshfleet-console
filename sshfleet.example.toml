@@ -5,6 +5,8 @@ version = 1
 # One-run precedence: --shell/--shell-arg, then this TOML, then OS auto-detection.
 default_shell = "auto"
 shell_args = []
+# Per-tab in-memory VT scrollback. It is bounded and never persisted.
+scrollback_lines = 10000
 
 [app]
 refresh_interval = "10s"
