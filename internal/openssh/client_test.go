@@ -3,7 +3,9 @@ package openssh
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -67,6 +69,41 @@ userknownhostsfile /home/tester/.ssh/known_hosts /home/tester/.ssh/known_hosts2
 	wantFiles := []string{"/home/tester/.ssh/known_hosts", "/home/tester/.ssh/known_hosts2"}
 	if !reflect.DeepEqual(effective.UserKnownHostsFiles, wantFiles) {
 		t.Fatalf("known hosts files = %#v, want %#v", effective.UserKnownHostsFiles, wantFiles)
+	}
+}
+
+func TestParseEffectiveRetainsOnlyCustomProxyPresence(t *testing.T) {
+	for _, command := range []string{"none", "ssh -W %h:%p gateway --private-value"} {
+		effective := parseEffective("hostname app.example\nuser deploy\nproxycommand " + command + "\n")
+		if effective.CustomProxy != (command != "none") {
+			t.Fatalf("custom proxy marker = %v", effective.CustomProxy)
+		}
+		if strings.Contains(fmt.Sprintf("%+v", effective), "private-value") {
+			t.Fatal("proxy command retained in UI metadata")
+		}
+	}
+}
+
+func TestResolveEffectiveOpenSSHIncludeAndOverridesWithoutConnection(t *testing.T) {
+	binary, err := exec.LookPath("ssh")
+	if err != nil {
+		t.Skip("OpenSSH is unavailable")
+	}
+	dir := t.TempDir()
+	defaults := filepath.Join(dir, "defaults.conf")
+	path := filepath.Join(dir, "ssh.conf")
+	if err := os.WriteFile(defaults, []byte("Host *\n    User inherited\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	text := fmt.Sprintf("Include %s\nHost app\n    HostName 192.0.2.20\n    Port 2222\n    ProxyJump jump-1,ops@jump-2:2200\n", defaults)
+	if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	effective := (Client{Binary: binary}).Resolve(ctx, inventory.Host{Alias: "app", ConfigPath: path, User: "override"})
+	if effective.Error != "" || effective.Hostname != "192.0.2.20" || effective.User != "override" || effective.Port != "2222" || effective.ProxyJump != "jump-1,ops@jump-2:2200" {
+		t.Fatalf("effective OpenSSH settings: %+v", effective)
 	}
 }
 

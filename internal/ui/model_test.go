@@ -780,9 +780,21 @@ func TestDynamicContainerRefreshReplacesOnlyDynamicTargets(t *testing.T) {
 		t.Fatalf("dynamic sources = %#v", got.sources)
 	}
 	m.active = 1
-	blocked, _ := m.Update(dynamicSourcesMsg{hosts: []inventory.Host{newContainer}})
-	if len(blocked.(Model).hosts) != 2 || blocked.(Model).hosts[1].ID != oldContainer.ID {
-		t.Fatal("dynamic refresh mutated indices during an active probe sweep")
+	m.polling[static.ID] = true
+	m.probeRunning[static.ID] = true
+	m.queue = []string{oldContainer.ID}
+	refreshed, _ := m.Update(dynamicSourcesMsg{hosts: []inventory.Host{newContainer}})
+	got = refreshed.(Model)
+	if got.active != 1 || !got.probeRunning[static.ID] {
+		t.Fatal("refresh lost an active probe")
+	}
+	finished, _ := got.Update(probeMsg{id: static.ID, result: probe.Result{Status: probe.StatusOnline}})
+	got = finished.(Model)
+	if got.active != 0 || len(got.queue) != 0 {
+		t.Fatal("removed container remained queued")
+	}
+	if _, ok := got.results[oldContainer.ID]; ok {
+		t.Fatal("result rebound to removed container")
 	}
 }
 

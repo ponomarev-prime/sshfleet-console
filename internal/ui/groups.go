@@ -253,6 +253,7 @@ func (m Model) applyGroupChanged(msg groupChangedMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.hosts, m.sources = msg.hosts, msg.sources
+	m.invalidateResolutions()
 	m.setGroupDefinitions(msg.groups)
 	m.queue = nil
 	m.restoreNavigation(msg.navigation)
