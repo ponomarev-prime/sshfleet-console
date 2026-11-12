@@ -1,17 +1,32 @@
 # SSH Fleet Console
 
-`sshfleet` — быстрая локальная TUI-консоль для SSH-флота: источники и группы слева,
+[![CI](https://github.com/ponomarev-prime/sshfleet-console/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/ponomarev-prime/sshfleet-console/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/ponomarev-prime/sshfleet-console)](https://github.com/ponomarev-prime/sshfleet-console/releases/latest)
+[![License](https://img.shields.io/github/license/ponomarev-prime/sshfleet-console)](LICENSE)
+
+**Keyboard-first, agentless TUI for discovering, monitoring, grouping and opening
+OpenSSH hosts and local containers.**
+
+`sshfleet` — быстрая локальная TUI-консоль для SSH-флота: источники, группы и Views слева,
 главная таблица узлов по центру, объяснимый Preview справа.
 
 Она читает привычный OpenSSH config, параллельно и безопасно опрашивает Linux
 узлы, открывает обычный или встроенный терминал и помогает работать с десятками
 и сотнями SSH-алиасов без собственного SSH-стека.
 
-> Проект находится до первого стабильного релиза. Текущая разработка ведётся в
-> `dev`; проверенные SemVer-релизы выпускаются только из защищённой `main`.
-> Текущий private development history нельзя публиковать целиком: перед первым
-> public push нужна clean-history процедура из
-> [гайда публикации](docs/publishing.md).
+> **Важно:** это локальная операторская консоль, а не SSH-сервер, background
+> daemon или замена OpenSSH. Обычные подключения выполняет установленный
+> OpenSSH; probe ничего не устанавливает на удалённый host. README ветки `dev`
+> описывает текущую разработку, а гарантированный контракт конкретной stable
+> версии зафиксирован в её GitHub Release.
+
+> Первый публичный stable-релиз —
+> [`v0.1.0`](https://github.com/ponomarev-prime/sshfleet-console/releases/tag/v0.1.0).
+> Текущая разработка ведётся в `dev`; проверенные SemVer-релизы выпускаются
+> только из защищённой `main` через полный regression и ручное подтверждение
+> environment `release`.
+> Граница clean public history и правила privacy-safe screenshots сохранены в
+> [гайде публикации](docs/publishing.md).
 
 ```text
  SOURCES        HOSTS — основной рабочий столбец                 PREVIEW
@@ -20,6 +35,9 @@
  shared           top: postgres[1842] · 3s ago                  HOST STATUS · REMOTE
  GROUPS         ○ git.example  Git access                       SSH SOFTWARE · REMOTE
  production
+ VIEWS          ● busy-node    CPU% ████████████ 91%            HOST STATUS · REMOTE
+ Errors
+ MEM ≤ 20%
                                                                 SYSTEM · REMOTE
 ```
 
@@ -40,6 +58,10 @@
 
 ![SSH Fleet Console groups](docs/assets/screenshots/groups.png)
 
+### Вычисляемый View с низким остатком памяти
+
+![SSH Fleet Console low-memory View](docs/assets/screenshots/views.png)
+
 </details>
 
 Все изображения созданы отдельным fixture-only PTY pipeline. Они не содержат
@@ -53,6 +75,12 @@
   наиболее активный процесс и возраст данных; Preview разделяет локальные и
   удалённые сведения. Dtop-style `█/░` bars сохраняют заполненную и свободную
   части даже на нейтрально выделенной строке.
+- **Глобальный поиск по fleet.** `/` находит host за пределами выбранного Source
+  или Group по alias/name, target, user/port, source, tags, groups и container
+  metadata; составной запрос вроде `perf 202` требует совпадения всех слов.
+- **Вычисляемые Views.** `Offline`, `Errors`, `CPU ≥ 80%`, `MEM ≤ 20%` и
+  `Stale` мгновенно отбирают узлы по последнему probe/source state, ничего не
+  записывая в inventories или groups.
 - **Несколько уровней источников.** Встроенный `~/.ssh/config`, дополнительные
   доверенные OpenSSH configs, строгий TOML inventory, локальные и удалённые
   подписанные age-bundles.
@@ -68,10 +96,30 @@
 
 ## Быстрый старт
 
-Полностью проверенный runtime сейчас — Linux. Нужны OpenSSH client и Go 1.25+
-для сборки из исходников. Core также собирается нативно на macOS и Windows;
+Полностью проверенный runtime сейчас — Linux. Для готового release нужен только
+OpenSSH client. Для сборки из исходников также нужен Go 1.25+. Core собирается
+нативно на macOS и Windows;
 healthcheck честно отключает ещё не реализованные ConPTY и native credential
 store actions, вместо Unix-эмуляции или падения всего приложения.
+
+### Готовый Linux release
+
+Скачайте архив `linux-amd64` или `linux-arm64` и `checksums.txt` со страницы
+[последнего релиза](https://github.com/ponomarev-prime/sshfleet-console/releases/latest),
+затем:
+
+```sh
+sha256sum -c --ignore-missing checksums.txt
+tar -xzf sshfleet-console-v0.1.0-linux-amd64.tar.gz
+cd sshfleet-console-v0.1.0-linux-amd64
+./install.sh --prebuilt
+sshfleet healthcheck
+sshfleet
+```
+
+Имя архива в примере замените на скачанную версию и архитектуру.
+
+### Из исходников
 
 ```sh
 git clone https://github.com/ponomarev-prime/sshfleet-console.git
@@ -91,6 +139,7 @@ sshfleet
 
 ```sh
 make install-user
+sshfleet -v
 sshfleet --version
 sshfleet
 ```
@@ -150,8 +199,9 @@ tools.
 | `Tab`, `h/l`, `←/→` | сменить панель |
 | `j/k`, `↑/↓` | выбрать строку |
 | `g/G`, `Home/End` | перейти в начало/конец |
-| `/`, `Esc` | фильтр / закрыть или очистить |
-| `Enter` | применить source или открыть контекстное меню host |
+| `/` | глобальный живой поиск host по всему fleet |
+| `Esc` после поиска | закрыть ввод; повторное нажатие очищает поиск и возвращает прежний Source/Host |
+| `Enter` | применить source/group/view или открыть контекстное меню host |
 | `n` в Sources | создать private group |
 | `m` на Host | добавить/убрать host из группы |
 | `R`, `D`, `e` на Group | переименовать, удалить или открыть fragment в редакторе |
@@ -161,17 +211,21 @@ tools.
 | `r` | обновить probes |
 | `Shift+K` | проверить и затем backup-first исправить changed host key |
 | `?` | application healthcheck, пути tools и фактические ширины UI |
-| `Alt+1…9` | выбрать вкладку напрямую: `1` — Fleet, `2` — первая сессия |
+| `Ctrl+G`, затем `1…9` | выбрать вкладку: `1` — Fleet, `2` — первая сессия |
 | `Ctrl+N` / `Ctrl+P` | следующая / предыдущая вкладка |
-| `Ctrl+G` | вернуться в постоянную вкладку Fleet |
+| `Ctrl+G`, затем `Esc` | вернуться во Fleet без выбора другой вкладки |
+| Колесо мыши в terminal tab | листать локальную историю экрана, не историю команд shell |
 | `Ctrl+D` в terminal tab | немедленно закрыть вкладку и вернуться во Fleet |
 | `Ctrl+]` в terminal tab | запросить закрытие; повторное нажатие подтверждает live close |
 | `q`, `Ctrl+C` во Fleet | выйти |
 
-`Alt+1…9` — основной прямой способ. SSH Fleet Console также принимает
-`Ctrl+1…9`, но это сочетание требует modifyOtherKeys/Kitty keyboard protocol и
-часто резервируется внешним terminal emulator. Гарантированный fallback —
-`Ctrl+N/P` и `Ctrl+G`.
+Надёжный прямой способ — нажать `Ctrl+G`, отпустить, затем нажать обычную цифру.
+SSH Fleet Console сначала возвращает Fleet, показывает `TAB SELECT`, и только в
+этом коротком режиме интерпретирует `1…9` как номер вкладки; `Esc` отменяет
+выбор. Такая последовательность не конфликтует с `Alt+цифра` в Konsole и других
+terminal emulators. `Alt+1…9` и `Ctrl+1…9` всё ещё принимаются как необязательные
+сочетания совместимости, если внешний терминал действительно передаёт их
+приложению. `Ctrl+N/P` всегда циклически переключают доступные вкладки.
 Bracketed paste передаётся активному terminal tab/Preview одним событием и не
 разбирается как горячие клавиши SSH Fleet Console.
 В живой terminal tab обычная `q` передаётся вложенной программе. После
@@ -179,6 +233,10 @@ Bracketed paste передаётся активному terminal tab/Preview о�
 Fleet, а её финальный экран остаётся во вкладке с `✓`.
 `Ctrl+D` — локальное быстрое закрытие: вкладка удаляется сразу, а остановка PTY
 завершается в фоне. Это работает и когда вложенная программа не понимает EOF.
+Колесо мыши листает bounded VT-scrollback активной вкладки по три строки. Внизу
+появляется `SCROLL N/M`; колесо вниз возвращает live-экран, а любая клавиша
+сначала возвращает live-экран и затем передаётся вложенному PTY. Поэтому wheel
+не превращается в `↑/↓` и не перебирает историю команд удалённой shell.
 
 Меню `Enter` адаптируется к типу узла. Для Linux это новая terminal tab по умолчанию,
 terminal in Preview, единый временный SSH Fleet workspace во вкладке со всеми bundled
@@ -194,7 +252,7 @@ endpoint — безопасный `ssh -T` access check. Для changed host key
 
 | Область | Возможности |
 |---|---|
-| Inventory | OpenSSH aliases/Includes, strict TOML, host overlays, keyboard-managed cross-source groups |
+| Inventory | OpenSSH aliases/Includes, strict TOML, host overlays, cross-source groups, read-only computed Views |
 | Sources | local OpenSSH, restricted TOML, signed+age local bundle, authenticated HTTPS remote bundle |
 | Observability | bounded concurrent Linux probe, capacity, utilization bars, SSH/system/container metadata |
 | Sessions | постоянная Fleet + независимые SSH/local/container PTY tabs, embedded Preview PTY/VT, bounded sanitized tail |
@@ -220,6 +278,8 @@ version = 1
 # Только локальная рабочая станция; SSH/container shell имеют свои policy.
 default_shell = "auto"
 shell_args = []
+# 1..100000; отдельный RAM-buffer для каждой terminal tab, без записи на диск.
+scrollback_lines = 10000
 
 [app]
 refresh_interval = "10s"
@@ -323,10 +383,15 @@ SSH Fleet Console не реализует SSH и не обходит прове�
 ## Версии и релизы
 
 ```sh
+sshfleet -v
 sshfleet --version
 sshfleet version
 sshfleet version --json
 ```
+
+`-v` и `--version` эквивалентны и печатают одну компактную строку. Subcommand
+`version` показывает полную provenance, а `version --json` предназначен для
+автоматизации и bug reports.
 
 Development build выглядит как `dev-14061d49c195`; суффикс `+dirty` означает,
 что в бинарь попали незакоммиченные изменения. Stable release использует строгий

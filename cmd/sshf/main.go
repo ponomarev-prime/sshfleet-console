@@ -24,6 +24,7 @@ import (
 	"github.com/ponomarev-prime/sshfleet-console/internal/inventory"
 	"github.com/ponomarev-prime/sshfleet-console/internal/openssh"
 	"github.com/ponomarev-prime/sshfleet-console/internal/platform"
+	"github.com/ponomarev-prime/sshfleet-console/internal/runlog"
 	"github.com/ponomarev-prime/sshfleet-console/internal/sourcebundle"
 	"github.com/ponomarev-prime/sshfleet-console/internal/toolcheck"
 	"github.com/ponomarev-prime/sshfleet-console/internal/ui"
@@ -73,6 +74,12 @@ func main() {
 		}
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "logs" {
+		if err := runLogsCommand(os.Args[2:], os.Stdout); err != nil {
+			fatal(err)
+		}
+		return
+	}
 	if len(os.Args) > 1 && os.Args[1] == "version" {
 		if err := runVersionCommand(os.Args[2:], os.Stdout); err != nil {
 			fatal(err)
@@ -98,6 +105,8 @@ func main() {
 		return
 	}
 	var (
+		logDir            string
+		noLog             bool
 		configPath        string
 		overridesDir      string
 		editor            string
@@ -117,6 +126,8 @@ func main() {
 		maxConcurrent     int
 		refreshInterval   time.Duration
 	)
+	flag.StringVar(&logDir, "log-dir", "", "private launch JSONL directory (default: XDG state directory)")
+	flag.BoolVar(&noLog, "no-log", false, "disable launch diagnostics for this run")
 	flag.StringVar(&configPath, "config", "", "main SSH Fleet Console TOML config (default: XDG config directory)")
 	flag.StringVar(&overridesDir, "overrides-dir", "", "editable host overlay directory (default: XDG config directory)")
 	flag.StringVar(&editor, "editor", "", "editor executable for config editing (default priority: SSH Fleet Console nvim, then system nvim, vim, nano)")
@@ -135,6 +146,7 @@ func main() {
 	flag.IntVar(&maxConcurrent, "max-concurrent", 0, "maximum simultaneous probes (default: 2 x available CPU cores)")
 	flag.DurationVar(&refreshInterval, "refresh-interval", 0, "probe refresh interval (default: 10s)")
 	flag.BoolVar(&listOnly, "list", false, "list discovered hosts and exit")
+	flag.BoolVar(&showVersion, "v", false, "print version and exit (shorthand for --version)")
 	flag.BoolVar(&showVersion, "version", false, "print version and exit")
 	flag.Parse()
 
@@ -143,6 +155,9 @@ func main() {
 		return
 	}
 
+	log := startLaunchLog(logDir, noLog)
+	defer log.Close()
+	configStarted := time.Now()
 	cfg, usedPath, err := config.Load(configPath)
 	if err != nil {
 		fatal(err)
@@ -222,13 +237,8 @@ func main() {
 	cfg.Terminal.EffectiveShell = terminal.Effective
 	cfg.Terminal.EffectiveArgs = append([]string(nil), terminal.Args...)
 	cfg.Terminal.EffectiveOrigin = terminal.Origin
-	editorResult := toolcheck.ResolveEditor(cfg.App.EditorPriority)
-	editor = editorResult.Path
-	health := applicationHealth(cfg.App.SSHBinary, terminal, platform.Current())
-	sshResult := toolcheck.Resolve(cfg.App.SSHBinary)
-	if sshResult.Error == "" {
-		cfg.App.SSHBinary = sshResult.Path
-	}
+	editorResult := toolcheck.Result{}
+	var health []toolcheck.Result
 	if overridesDir == "" {
 		overridesDir, err = config.DefaultOverridesDir()
 	} else {
@@ -283,13 +293,26 @@ func main() {
 		hosts, sources, err := buildInventoryWithGroups(groups)
 		return hosts, sources, groups, err
 	}
-	hosts, sources, err := buildInventoryWithGroups(cfg.Groups)
-	if err != nil {
-		fatal(err)
-	}
+	log.Record(runlog.Event{Event: "startup.config", DurationMS: time.Since(configStarted).Milliseconds()})
+	probesEnabled := !noProbe
+	log.Record(runlog.Event{Event: "launch.policy", Probes: &probesEnabled, Count: cfg.App.MaxConcurrent, Total: len(cfg.Sources)})
 	if listOnly {
+		hosts, sources, err := buildInventoryWithGroups(cfg.Groups)
+		if err != nil {
+			fatal(err)
+		}
 		printInventory(usedPath, hosts, sources)
 		return
+	}
+	var hosts []inventory.Host
+	var sources []inventory.SourceSummary
+	for _, source := range cfg.Sources {
+		sources = append(sources, inventory.SourceSummary{Name: source.Name, Path: source.Path, State: inventory.SourceStateLoading})
+	}
+	if cfg.App.Containers.Enabled {
+		for _, runtime := range cfg.App.Containers.Runtimes {
+			sources = append(sources, inventory.SourceSummary{Name: "containers · " + runtime, Dynamic: true, State: inventory.SourceStateLoading})
+		}
 	}
 
 	askPass := resolveAskPass()
@@ -301,13 +324,12 @@ func main() {
 		WorkspaceBundle:  workspaceBundle,
 		WorkspaceCleanup: cfg.App.WorkspaceCleanup,
 	}
-	localContext, localCancel := context.WithTimeout(context.Background(), 2*time.Second)
-	client.LocalClient = openssh.DetectLocalClient(localContext, client.Binary)
-	localCancel()
+	launchContext, launchCancel := context.WithCancel(context.Background())
+	defer launchCancel()
 	var dynamicDiscover func() ([]inventory.Host, []inventory.SourceSummary)
 	if cfg.App.Containers.Enabled {
 		dynamicDiscover = func() ([]inventory.Host, []inventory.SourceSummary) {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			ctx, cancel := context.WithTimeout(launchContext, 5*time.Second)
 			defer cancel()
 			hosts, sources := containers.Discover(ctx, cfg.App.Containers)
 			groups, groupErr := loadGroups()
@@ -323,6 +345,85 @@ func main() {
 			return hosts, sources
 		}
 	}
+	startupLoader := func(ctx context.Context, emit func(ui.StartupUpdate)) {
+		applyPolicy := func(items []inventory.Host) {
+			if noProbe {
+				for i := range items {
+					items[i].Probe = false
+				}
+			}
+		}
+		phaseStarted := time.Now()
+		overrides, err := config.LoadHostOverrides(overridesDir)
+		if err != nil {
+			states := append([]inventory.SourceSummary(nil), sources...)
+			for i := range states {
+				states[i].Err = err
+				states[i].State = inventory.SourceStateUnavailable
+			}
+			emit(ui.StartupUpdate{Sources: states})
+			log.Record(runlog.Event{Event: "startup.failed", Kind: "overrides"})
+			return
+		}
+		layered := cfg
+		layered.Hosts = append(append([]config.HostConfig(nil), cfg.Hosts...), overrides...)
+		sourceIndex := 0
+		inventoryHosts, inventorySources := inventory.BuildProgress(ctx, layered, func(items []inventory.Host, states []inventory.SourceSummary) {
+			applyPolicy(items)
+			status := "ready"
+			if sourceIndex < len(states) && states[sourceIndex].Err != nil {
+				status = "failed"
+			}
+			kind := ""
+			if sourceIndex < len(cfg.Sources) {
+				kind = cfg.Sources[sourceIndex].Kind
+			}
+			log.Record(runlog.Event{Event: "source.loaded", Kind: kind, Status: status, DurationMS: time.Since(phaseStarted).Milliseconds(), Count: len(items)})
+			sourceIndex++
+			phaseStarted = time.Now()
+			emit(ui.StartupUpdate{Hosts: items, Sources: states})
+		})
+		if ctx.Err() != nil {
+			return
+		}
+		applyPolicy(inventoryHosts)
+		emit(ui.StartupUpdate{Hosts: inventoryHosts, Sources: inventorySources})
+		if cfg.App.Containers.Enabled {
+			for _, runtime := range cfg.App.Containers.Runtimes {
+				if ctx.Err() != nil {
+					return
+				}
+				started := time.Now()
+				runtimeConfig := cfg.App.Containers
+				runtimeConfig.Runtimes = []string{runtime}
+				runtimeContext, cancel := context.WithTimeout(ctx, 5*time.Second)
+				items, states := containers.Discover(runtimeContext, runtimeConfig)
+				cancel()
+				inventory.AssignGroups(items, cfg.Groups)
+				applyPolicy(items)
+				status := "ready"
+				for _, state := range states {
+					if state.Err != nil {
+						status = "failed"
+					}
+				}
+				log.Record(runlog.Event{Event: "runtime.loaded", Kind: runtime, Status: status, Count: len(items), DurationMS: time.Since(started).Milliseconds()})
+				emit(ui.StartupUpdate{Hosts: items, Sources: states})
+			}
+		}
+		if ctx.Err() != nil {
+			return
+		}
+		started := time.Now()
+		editorInfo := toolcheck.ResolveEditor(cfg.App.EditorPriority)
+		healthInfo := applicationHealth(cfg.App.SSHBinary, terminal, platform.Current())
+		localContext, cancel := context.WithTimeout(ctx, 2*time.Second)
+		resolvedClient := client
+		resolvedClient.LocalClient = openssh.DetectLocalClient(localContext, client.Binary)
+		cancel()
+		log.Record(runlog.Event{Event: "startup.tools", DurationMS: time.Since(started).Milliseconds()})
+		emit(ui.StartupUpdate{Client: &resolvedClient, Health: healthInfo, Editor: &editorInfo})
+	}
 	model := ui.New(
 		hosts,
 		sources,
@@ -332,10 +433,13 @@ func main() {
 		ui.WithHostEditor(overridesDir, editor, buildInventory),
 		ui.WithAppConfigEditor(usedPath),
 		ui.WithUILayout(cfg.App.UI),
+		ui.WithTerminalConfig(cfg.Terminal),
 		ui.WithHealth(health, editorResult),
 		ui.WithGroupsAndCommands(cfg.Groups, cfg.Commands),
 		ui.WithGroupEditor(groupsDir, editor, reloadGroups),
 		ui.WithDynamicDiscovery(cfg.App.Containers.RefreshInterval.Duration, dynamicDiscover),
+		ui.WithRunLog(log),
+		ui.WithStartup(launchContext, startupLoader),
 	)
 	if _, err := tea.NewProgram(model).Run(); err != nil {
 		fatal(fmt.Errorf("run TUI: %w", err))
@@ -768,6 +872,8 @@ func printInventory(configPath string, hosts []inventory.Host, sources []invento
 }
 
 func fatal(err error) {
+	launchLog.Record(runlog.Event{Event: "run.fatal", Status: "failed"})
+	launchLog.Close()
 	fmt.Fprintln(os.Stderr, "sshfleet:", err)
 	os.Exit(1)
 }

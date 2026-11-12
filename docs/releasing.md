@@ -5,8 +5,9 @@
 - Development builds use `<branch>-<12-char-commit>`, for example
   `dev-b941263e4144`; `+dirty` proves that tracked or untracked source changes
   were present during the build.
-- Stable builds use strict SemVer tags `vMAJOR.MINOR.PATCH`. The first planned
-  public release is `v0.1.0`.
+- Stable builds use strict SemVer tags `vMAJOR.MINOR.PATCH`. The first public
+  release is [`v0.1.0`](https://github.com/ponomarev-prime/sshfleet-console/releases/tag/v0.1.0),
+  published from commit `e9d40dc9694e316ddc1b761e343cfde9271b8d40`.
 - Before `v1.0.0`, MINOR may change product behavior and PATCH is reserved for
   compatible bug fixes and security hardening. From `v1.0.0`, normal SemVer
   compatibility rules apply.
@@ -22,6 +23,10 @@ and increasing SemVer, main/SHA/worktree/origin gates, deterministic release
 archives, VERSION checksums, Linux arm64 packaging and the protected
 verify-to-publish workflow topology. The same suite is an explicit step of
 `make regression`, so its log and status remain in regression evidence.
+
+The real Neovim PTY scenario runs after the pinned companion toolchain is
+prepared. Full regression requires that editor instead of silently skipping
+its keyboard check; the test waits for Fleet startup readiness before editing.
 
 ## Repository model
 

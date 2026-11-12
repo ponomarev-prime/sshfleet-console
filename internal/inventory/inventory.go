@@ -97,6 +97,7 @@ type SourceState string
 
 const (
 	SourceStateLoaded      SourceState = "loaded"
+	SourceStateLoading     SourceState = "loading"
 	SourceStateEmpty       SourceState = "empty"
 	SourceStatePartial     SourceState = "partial"
 	SourceStateStale       SourceState = "stale"
@@ -105,6 +106,10 @@ const (
 )
 
 func Build(cfg config.Config) ([]Host, []SourceSummary) {
+	return BuildProgress(context.Background(), cfg, nil)
+}
+
+func BuildProgress(ctx context.Context, cfg config.Config, progress func([]Host, []SourceSummary)) ([]Host, []SourceSummary) {
 	stateDir := cfg.App.SourceStateDir
 	if stateDir != "" {
 		stateDir, _ = config.ExpandPath(stateDir)
@@ -114,7 +119,7 @@ func Build(cfg config.Config) ([]Host, []SourceSummary) {
 		StateDir:   stateDir,
 		MaxBytes:   cfg.App.SourceMaxBytes,
 	}
-	return BuildWithOptions(cfg, BuildOptions{Context: context.Background(), Bundles: loader})
+	return BuildWithOptions(cfg, BuildOptions{Context: ctx, Bundles: loader, OnSource: progress})
 }
 
 type BundleLoader interface {
@@ -122,8 +127,9 @@ type BundleLoader interface {
 }
 
 type BuildOptions struct {
-	Context context.Context
-	Bundles BundleLoader
+	Context  context.Context
+	Bundles  BundleLoader
+	OnSource func([]Host, []SourceSummary)
 }
 
 func BuildWithOptions(cfg config.Config, options BuildOptions) ([]Host, []SourceSummary) {
@@ -133,16 +139,10 @@ func BuildWithOptions(cfg config.Config, options BuildOptions) ([]Host, []Source
 	var hosts []Host
 	summaries := make([]SourceSummary, 0, len(cfg.Sources))
 	sshConfigPaths := make(map[string]string, len(cfg.Sources))
-	credentials := make(map[string]config.Credential, len(cfg.Credentials))
-	for _, credential := range cfg.Credentials {
-		credentials[credential.Name] = credential
-	}
 	// Early builds called ~/.ssh/config "default". Keep those overlays working
 	// without rewriting user files, unless a real source named default exists.
 	hasUserSource, hasDefaultSource := false, false
-	sourceNames := make(map[string]struct{}, len(cfg.Sources))
 	for _, source := range cfg.Sources {
-		sourceNames[source.Name] = struct{}{}
 		hasUserSource = hasUserSource || source.Name == "user"
 		hasDefaultSource = hasDefaultSource || source.Name == "default"
 	}
@@ -153,12 +153,25 @@ func BuildWithOptions(cfg config.Config, options BuildOptions) ([]Host, []Source
 			}
 		}
 	}
-	identities := make(map[string]config.Identity, len(cfg.Identities))
-	for _, identity := range cfg.Identities {
-		identities[identity.Name] = identity
-	}
 
-	for _, source := range cfg.Sources {
+	emit := func(index int) {
+		if options.OnSource == nil || options.Context.Err() != nil {
+			return
+		}
+		partial := cfg
+		partial.Sources = cfg.Sources[:index+1]
+		copied := append([]Host(nil), hosts...)
+		for i := range copied {
+			copied[i].Groups = append([]string(nil), hosts[i].Groups...)
+			copied[i].Tags = append([]string(nil), hosts[i].Tags...)
+		}
+		ready, states := finishInventory(partial, copied, append([]SourceSummary(nil), summaries...), sshConfigPaths, true)
+		options.OnSource(ready, states)
+	}
+	for sourceIndex, source := range cfg.Sources {
+		if options.Context.Err() != nil {
+			break
+		}
 		displayPath := source.Path
 		if source.Kind == config.SourceRemote {
 			displayPath = source.URL
@@ -170,6 +183,7 @@ func BuildWithOptions(cfg config.Config, options BuildOptions) ([]Host, []Source
 		}
 		if err != nil {
 			summaries = append(summaries, SourceSummary{Name: source.Name, Path: displayPath, Err: err})
+			emit(sourceIndex)
 			continue
 		}
 		var aliases []string
@@ -198,8 +212,11 @@ func BuildWithOptions(cfg config.Config, options BuildOptions) ([]Host, []Source
 				break
 			}
 			authKey := ""
-			if credential, ok := credentials[source.AuthCredential]; ok {
-				authKey = credential.Key
+			for _, credential := range cfg.Credentials {
+				if credential.Name == source.AuthCredential {
+					authKey = credential.Key
+					break
+				}
 			}
 			ctx, cancel := context.WithTimeout(options.Context, cfg.App.SourceFetchTimeout.Duration)
 			var document config.Inventory
@@ -214,6 +231,7 @@ func BuildWithOptions(cfg config.Config, options BuildOptions) ([]Host, []Source
 		summary := SourceSummary{Name: source.Name, Path: path, Hosts: len(aliases) + len(inventoryHosts) + len(localHosts), Err: err}
 		summaries = append(summaries, summary)
 		if err != nil {
+			emit(sourceIndex)
 			continue
 		}
 		for _, alias := range aliases {
@@ -276,8 +294,25 @@ func BuildWithOptions(cfg config.Config, options BuildOptions) ([]Host, []Source
 			}
 			hosts = append(hosts, host)
 		}
+		emit(sourceIndex)
 	}
 
+	return finishInventory(cfg, hosts, summaries, sshConfigPaths, false)
+}
+
+func finishInventory(cfg config.Config, hosts []Host, summaries []SourceSummary, sshConfigPaths map[string]string, partial bool) ([]Host, []SourceSummary) {
+	credentials := make(map[string]config.Credential)
+	for _, item := range cfg.Credentials {
+		credentials[item.Name] = item
+	}
+	identities := make(map[string]config.Identity)
+	for _, item := range cfg.Identities {
+		identities[item.Name] = item
+	}
+	sourceNames := make(map[string]struct{})
+	for _, item := range cfg.Sources {
+		sourceNames[item.Name] = struct{}{}
+	}
 	for i := range hosts {
 		assigned := hosts[i].CredentialName
 		for _, rule := range cfg.HostRules {
@@ -315,7 +350,7 @@ func BuildWithOptions(cfg config.Config, options BuildOptions) ([]Host, []Source
 			apply(&hosts[i], override)
 			matched = true
 		}
-		if matched {
+		if matched || (partial && override.Source == "") {
 			continue
 		}
 		if override.Source != "" {

@@ -7,7 +7,8 @@ committing generated binaries or build caches.
 
 - `src/` contains pinned Git submodules for lf, dtop, Neovim, and bat.
 - `config/` contains the shared, reviewed defaults used by sshfleet launchers.
-- `bin/` contains tracked launchers that select those configs.
+- `launchers/` contains tracked POSIX shell source that selects those configs.
+- `bin/` is reserved for generated/install layouts and is ignored by Git.
 - `manifest.toml` records the audited release, upstream URL, and exact commit.
 - `go.mod` is an intentional module boundary so `go test ./...` in sshfleet
   never treats upstream fixtures (notably bat syntax samples) as application packages.
@@ -33,12 +34,13 @@ make remote-bundle        # create the ignored, checksummed Linux/amd64 archive
 make test-remote-bundle   # versions + real Neovim TUI in offline Ubuntu 22.04
 ```
 
-Run the configured tools through `tools/bin/lf`, `tools/bin/dtop`,
-`tools/bin/nvim`, `tools/bin/bat`, or the Ubuntu-compatible `tools/bin/batcat`.
+Run the configured tools through `tools/launchers/lf`, `tools/launchers/dtop`,
+`tools/launchers/nvim`, `tools/launchers/bat`, or the Ubuntu-compatible
+`tools/launchers/batcat`.
 The reviewed lf config opens files with `bat`; files above 50 lines request
 `less` paging when that capability exists and otherwise use bat's built-in
 pager. `e` resolves the editor in the explicit order `nvim`, `vim`, `nano`
-through `tools/bin/sshfleet-editor`.
+through `tools/launchers/sshfleet-editor`.
 To make these defaults available in a shell without installing anything:
 
 ```sh

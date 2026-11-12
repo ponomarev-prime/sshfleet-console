@@ -14,6 +14,8 @@ const initialAppConfig = `version = 1
 # "auto" uses the OS login/default shell and reports the effective executable.
 default_shell = "auto"
 shell_args = []
+# Per-tab in-memory VT history. Allowed: 1..100000 lines.
+scrollback_lines = 10000
 
 [app]
 # SSH fleet polling; omit max_concurrent to use 2 x available CPU cores.

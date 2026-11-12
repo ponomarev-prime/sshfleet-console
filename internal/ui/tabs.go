@@ -25,15 +25,17 @@ const (
 )
 
 type terminalTab struct {
-	id          uint64
-	targetID    string
-	label       string
-	state       terminalTabState
-	session     *session.Embedded
-	screen      string
-	errorText   string
-	closePrompt bool
-	interruptOK bool
+	id           uint64
+	targetID     string
+	label        string
+	state        terminalTabState
+	session      *session.Embedded
+	screen       string
+	errorText    string
+	closePrompt  bool
+	interruptOK  bool
+	scrollOffset int
+	scrollback   []string
 }
 
 type terminalTabStartedMsg struct {
@@ -50,11 +52,12 @@ type terminalTabOutputMsg struct {
 }
 
 type terminalTabFinishedMsg struct {
-	id      uint64
-	session *session.Embedded
-	lines   []string
-	screen  string
-	err     error
+	id         uint64
+	session    *session.Embedded
+	lines      []string
+	screen     string
+	scrollback []string
+	err        error
 }
 
 type terminalTabClosedMsg struct {
@@ -93,14 +96,18 @@ func (m Model) openTerminalTab(cmd *exec.Cmd, hostIndex int, label string, inter
 	}
 	m.tabs = append(m.tabs, tab)
 	m.activeTab = len(m.tabs)
-	m.quitTabsConfirm = false
+	m.tabSelectMode = false
+	m.quitConfirm = false
 	width, height := m.fullTerminalDimensions()
-	return m, startTerminalTabCmd(tab.id, cmd, width, height)
+	return m, startTerminalTabCmd(tab.id, cmd, width, height, m.terminalScrollbackLines)
 }
 
-func startTerminalTabCmd(id uint64, cmd *exec.Cmd, width, height int) tea.Cmd {
+func startTerminalTabCmd(id uint64, cmd *exec.Cmd, width, height, scrollbackLines int) tea.Cmd {
 	return func() tea.Msg {
 		ptySession, err := session.StartEmbedded(cmd, width, height)
+		if err == nil {
+			ptySession.Terminal.SetScrollbackSize(scrollbackLines)
+		}
 		return terminalTabStartedMsg{id: id, session: ptySession, err: err}
 	}
 }
@@ -112,11 +119,11 @@ func readTerminalTabCmd(id uint64, ptySession *session.Embedded) tea.Cmd {
 	}
 }
 
-func finishTerminalTabCmd(id uint64, ptySession *session.Embedded, screen string) tea.Cmd {
+func finishTerminalTabCmd(id uint64, ptySession *session.Embedded, screen string, scrollback []string) tea.Cmd {
 	return func() tea.Msg {
 		err := ptySession.Finish()
 		return terminalTabFinishedMsg{
-			id: id, session: ptySession, lines: ptySession.Capture.LastLines(12), screen: screen, err: err,
+			id: id, session: ptySession, lines: ptySession.Capture.LastLines(12), screen: screen, scrollback: scrollback, err: err,
 		}
 	}
 }
@@ -176,14 +183,20 @@ func (m Model) applyTerminalTabOutput(msg terminalTabOutputMsg) (tea.Model, tea.
 		return m, nil
 	}
 	if len(msg.data) > 0 {
+		before := msg.session.Terminal.ScrollbackLen()
 		_, _ = msg.session.Terminal.Write(msg.data)
+		after := msg.session.Terminal.ScrollbackLen()
+		if m.tabs[index].scrollOffset > 0 && after > before {
+			m.tabs[index].scrollOffset = min(after, m.tabs[index].scrollOffset+after-before)
+		}
 	}
 	if msg.err == nil {
 		return m, readTerminalTabCmd(msg.id, msg.session)
 	}
 	m.tabs[index].state = terminalTabFinishing
 	m.tabs[index].screen = msg.session.Terminal.Render()
-	return m, finishTerminalTabCmd(msg.id, msg.session, m.tabs[index].screen)
+	m.tabs[index].scrollback = terminalScrollbackSnapshot(msg.session)
+	return m, finishTerminalTabCmd(msg.id, msg.session, m.tabs[index].screen, m.tabs[index].scrollback)
 }
 
 func (m Model) applyTerminalTabFinished(msg terminalTabFinishedMsg) (tea.Model, tea.Cmd) {
@@ -195,6 +208,8 @@ func (m Model) applyTerminalTabFinished(msg terminalTabFinishedMsg) (tea.Model, 
 	tab := &m.tabs[index]
 	tab.session = nil
 	tab.screen = msg.screen
+	tab.scrollback = append([]string(nil), msg.scrollback...)
+	tab.scrollOffset = min(tab.scrollOffset, len(tab.scrollback))
 	tab.closePrompt = false
 	if tab.targetID != "" && len(msg.lines) > 0 {
 		m.sessionTail[tab.targetID] = append([]string(nil), msg.lines...)
@@ -233,7 +248,7 @@ func (m Model) applyTerminalTabClosed(msg terminalTabClosedMsg) (tea.Model, tea.
 	}
 	m.tabs = append(m.tabs[:index], m.tabs[index+1:]...)
 	m.activeTab = 0
-	m.quitTabsConfirm = false
+	m.quitConfirm = false
 	if m.quitAfterTabsClose && len(m.tabs) == 0 {
 		m.quitAfterTabsClose = false
 		return m, tea.Quit
@@ -265,7 +280,7 @@ func (m Model) handleTerminalTabKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		id, ptySession := tab.id, tab.session
 		m.tabs = append(m.tabs[:index], m.tabs[index+1:]...)
 		m.activeTab = 0
-		m.quitTabsConfirm = false
+		m.quitConfirm = false
 		m.message = "Terminal tab closed"
 		if ptySession == nil {
 			return m, nil
@@ -273,9 +288,7 @@ func (m Model) handleTerminalTabKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, closeTerminalTabCmd(id, ptySession)
 	case "ctrl+g":
 		tab.closePrompt = false
-		m.activeTab = 0
-		m.message = "Fleet tab"
-		return m, nil
+		return m.beginTabSelection(), nil
 	case "ctrl+n":
 		tab.closePrompt = false
 		return m.activateNextTab(), nil
@@ -314,12 +327,49 @@ func (m Model) handleTerminalTabKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if tab.state != terminalTabRunning || tab.session == nil || tab.closePrompt {
 		return m, nil
 	}
+	tab.scrollOffset = 0
 	key := msg.Key()
 	tab.session.Terminal.SendKey(uv.KeyPressEvent(uv.Key{
 		Text: key.Text, Mod: uv.KeyMod(key.Mod), Code: key.Code,
 		ShiftedCode: key.ShiftedCode, BaseCode: key.BaseCode, IsRepeat: key.IsRepeat,
 	}))
 	return m, nil
+}
+
+const terminalWheelLines = 3
+
+func (m Model) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
+	index := m.activeTab - 1
+	if index < 0 || index >= len(m.tabs) {
+		return m, nil
+	}
+	tab := &m.tabs[index]
+	available := len(tab.scrollback)
+	if tab.session != nil && tab.state == terminalTabRunning {
+		available = tab.session.Terminal.ScrollbackLen()
+	}
+	switch msg.Button {
+	case tea.MouseWheelUp:
+		tab.scrollOffset = min(available, tab.scrollOffset+terminalWheelLines)
+	case tea.MouseWheelDown:
+		tab.scrollOffset = max(0, tab.scrollOffset-terminalWheelLines)
+	}
+	return m, nil
+}
+
+func terminalScrollbackSnapshot(ptySession *session.Embedded) []string {
+	if ptySession == nil || ptySession.Terminal == nil {
+		return nil
+	}
+	scrollback := ptySession.Terminal.Scrollback()
+	if scrollback == nil || scrollback.Len() == 0 {
+		return nil
+	}
+	lines := make([]string, scrollback.Len())
+	for index := range lines {
+		lines[index] = scrollback.Line(index).Render()
+	}
+	return lines
 }
 
 func (m Model) handlePaste(msg tea.PasteMsg) (tea.Model, tea.Cmd) {
@@ -350,8 +400,9 @@ func directTabIndex(msg tea.KeyPressMsg) (int, bool) {
 	if key.Code < '1' || key.Code > '9' {
 		return 0, false
 	}
-	// Ctrl+digit needs modifyOtherKeys/Kitty keyboard support and may be
-	// reserved by the outer terminal. Alt+digit is the portable fallback.
+	// Both forms are compatibility shortcuts only: terminal emulators may
+	// reserve Alt+digit, while Ctrl+digit needs an extended keyboard protocol.
+	// Ctrl+G followed by an unmodified digit is the reliable application path.
 	if key.Mod != tea.ModCtrl && key.Mod != tea.ModAlt {
 		return 0, false
 	}
@@ -364,7 +415,8 @@ func (m Model) activateDirectTab(msg tea.KeyPressMsg) (Model, bool) {
 		return m, false
 	}
 	m.activeTab = index
-	m.quitTabsConfirm = false
+	m.tabSelectMode = false
+	m.quitConfirm = false
 	if index == 0 {
 		m.message = "Fleet tab"
 	} else {
@@ -373,7 +425,49 @@ func (m Model) activateDirectTab(msg tea.KeyPressMsg) (Model, bool) {
 	return m, true
 }
 
+func (m Model) beginTabSelection() Model {
+	m.activeTab = 0
+	m.quitConfirm = false
+	if len(m.tabs) == 0 {
+		m.tabSelectMode = false
+		m.message = "Fleet tab · no terminal tabs are open"
+		return m
+	}
+	m.tabSelectMode = true
+	m.message = ""
+	return m
+}
+
+func (m Model) handleTabSelectKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	key := msg.Key()
+	if key.Mod == 0 && key.Code >= '1' && key.Code <= '9' {
+		index := int(key.Code - '1')
+		if index > len(m.tabs) {
+			m.message = fmt.Sprintf("Tab %d is not open · choose 1…%d or Esc", index+1, min(9, len(m.tabs)+1))
+			return m, nil
+		}
+		m.activeTab = index
+		m.tabSelectMode = false
+		m.quitConfirm = false
+		if index == 0 {
+			m.message = "Fleet tab"
+		} else {
+			m.message = fmt.Sprintf("Terminal tab %d", index+1)
+		}
+		return m, nil
+	}
+	if msg.String() == "esc" || msg.String() == "ctrl+g" {
+		m.tabSelectMode = false
+		m.message = "Tab selection cancelled"
+		return m, nil
+	}
+	m.tabSelectMode = false
+	m.message = "Tab selection cancelled · press Ctrl+G, then 1…9"
+	return m, nil
+}
+
 func (m Model) activateNextTab() Model {
+	m.tabSelectMode = false
 	if len(m.tabs) == 0 {
 		m.activeTab = 0
 		return m
@@ -382,11 +476,12 @@ func (m Model) activateNextTab() Model {
 	if m.activeTab > len(m.tabs) {
 		m.activeTab = 0
 	}
-	m.quitTabsConfirm = false
+	m.quitConfirm = false
 	return m
 }
 
 func (m Model) activatePreviousTab() Model {
+	m.tabSelectMode = false
 	if len(m.tabs) == 0 {
 		m.activeTab = 0
 		return m
@@ -395,11 +490,18 @@ func (m Model) activatePreviousTab() Model {
 	if m.activeTab < 0 {
 		m.activeTab = len(m.tabs)
 	}
-	m.quitTabsConfirm = false
+	m.quitConfirm = false
 	return m
 }
 
 func (m Model) requestQuit() (tea.Model, tea.Cmd) {
+	m.tabSelectMode = false
+	if !m.quitConfirm {
+		m.quitConfirm = true
+		m.message = "Confirm exit · q/Enter/y yes · Esc/n cancel"
+		return m, nil
+	}
+	m.quitConfirm = false
 	live := false
 	for index := range m.tabs {
 		if m.tabs[index].session != nil || m.tabs[index].state == terminalTabStarting {
@@ -408,14 +510,11 @@ func (m Model) requestQuit() (tea.Model, tea.Cmd) {
 		}
 	}
 	if !live {
+		m.cancelBackground()
 		return m, tea.Quit
 	}
-	if !m.quitTabsConfirm {
-		m.quitTabsConfirm = true
-		m.message = "Live terminal tabs are open · q/Ctrl+C again closes them and quits"
-		return m, nil
-	}
 	m.quitAfterTabsClose = true
+	m.cancelBackground()
 	m.message = "Closing terminal tabs…"
 	cmds := make([]tea.Cmd, 0, len(m.tabs))
 	kept := m.tabs[:0]
@@ -496,7 +595,7 @@ func (m Model) renderActiveTerminalTab(width, height int) string {
 	}
 	tab := m.tabs[index]
 	content := tab.screen
-	if tab.session != nil && tab.state != terminalTabClosing {
+	if tab.session != nil && tab.state == terminalTabRunning {
 		content = tab.session.Terminal.Render()
 	}
 	if content == "" {
@@ -507,6 +606,16 @@ func (m Model) renderActiveTerminalTab(width, height int) string {
 		content = message
 	}
 	lines := strings.Split(strings.TrimSuffix(content, "\n"), "\n")
+	if tab.scrollOffset > 0 {
+		history := tab.scrollback
+		if tab.session != nil && tab.state == terminalTabRunning {
+			history = terminalScrollbackSnapshot(tab.session)
+		}
+		combined := append(append([]string(nil), history...), lines...)
+		end := max(0, len(combined)-min(tab.scrollOffset, len(history)))
+		start := max(0, end-height)
+		lines = combined[start:end]
+	}
 	if tab.state == terminalTabExited || tab.state == terminalTabFailed {
 		status := "Session exited · Ctrl+] close · Ctrl+G Fleet"
 		if tab.errorText != "" {
@@ -526,7 +635,14 @@ func (m Model) renderActiveTerminalTab(width, height int) string {
 }
 
 func (m Model) renderTerminalTabFooter(width int) string {
-	left := " TAB  Alt+1…9 select  Ctrl+N/P cycle  Ctrl+D close "
+	left := " TAB  Ctrl+G, then 1…9 select  Ctrl+N/P cycle  Ctrl+D close "
+	if index := m.activeTab - 1; index >= 0 && index < len(m.tabs) && m.tabs[index].scrollOffset > 0 {
+		available := len(m.tabs[index].scrollback)
+		if m.tabs[index].session != nil && m.tabs[index].state == terminalTabRunning {
+			available = m.tabs[index].session.Terminal.ScrollbackLen()
+		}
+		left = fmt.Sprintf(" SCROLL %d/%d  wheel ↓ live  key → live ", m.tabs[index].scrollOffset, available)
+	}
 	if index := m.activeTab - 1; index >= 0 && index < len(m.tabs) && m.tabs[index].closePrompt {
 		left = " LIVE SESSION  Ctrl+] confirm close  Esc cancel "
 	}

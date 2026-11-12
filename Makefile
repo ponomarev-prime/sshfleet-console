@@ -50,17 +50,18 @@ test-e2e:
 test-screenshots:
 	rm -rf .artifacts/tui-screenshots
 	mkdir -p .artifacts/tui-screenshots
-	SSHF_SCREENSHOT_DIR="$(CURDIR)/.artifacts/tui-screenshots" go test -v ./cmd/sshf -run 'TestTUIEndToEnd(ScreenshotsAndActionMenuTraversal|GroupsCRUDAndMembership|LocalContainerMenuPreviewAndLogs|TrustedLocalConfigMenuAndPreview)' -count=1
+	SSHF_SCREENSHOT_DIR="$(CURDIR)/.artifacts/tui-screenshots" go test -v ./cmd/sshf -run 'TestTUIEndToEnd(ScreenshotsAndActionMenuTraversal|ComputedViews|GroupsCRUDAndMembership|LocalContainerMenuPreviewAndLogs|TrustedLocalConfigMenuAndPreview|GlobalHostSearchAcrossSources)' -count=1
 
 test-public-screenshots:
 	rm -rf .artifacts/public-screenshots
 	mkdir -p .artifacts/public-screenshots
 	SSHF_PUBLIC_SCREENSHOTS=1 SSHF_SCREENSHOT_DIR="$(CURDIR)/.artifacts/public-screenshots" \
-		go test -v ./cmd/sshf -run 'TestTUIEndToEnd(ScreenshotsAndActionMenuTraversal|GroupsCRUDAndMembership)|TestPublicScreenshotSanitizer' -count=1
+		go test -v ./cmd/sshf -run 'TestTUIEndToEnd(ScreenshotsAndActionMenuTraversal|ComputedViews|GroupsCRUDAndMembership)|TestPublicScreenshotSanitizer' -count=1
 	magick compare -metric AE .artifacts/public-screenshots/wide-fleet.png docs/assets/screenshots/fleet-overview.png null:
 	magick compare -metric AE .artifacts/public-screenshots/wide-menu-1.png docs/assets/screenshots/host-actions.png null:
 	magick compare -metric AE .artifacts/public-screenshots/wide-terminal-tabs-completed.png docs/assets/screenshots/terminal-tabs.png null:
 	magick compare -metric AE .artifacts/public-screenshots/groups-two-members.png docs/assets/screenshots/groups.png null:
+	magick compare -metric AE .artifacts/public-screenshots/views-low-memory-filtered.png docs/assets/screenshots/views.png null:
 
 test-installed-launcher: build
 	tools/test-installed-launcher.sh
@@ -69,7 +70,7 @@ test-sources:
 	go test -v ./internal/sourcebundle ./internal/inventory ./internal/config -count=1
 
 test-menu:
-	go test -v ./internal/ui -run 'TestHostActionMenu|TestGroup|TestHealthcheckOverlay|TestTerminalTab' -count=1
+	go test -v ./internal/ui -run 'TestHostActionMenu|TestGroup|TestHealthcheckOverlay|TestTerminalTab|TestBuiltInView|TestView' -count=1
 
 test-install: build
 	tools/test-install.sh
@@ -186,10 +187,10 @@ test-remote-bundle: remote-bundle
 
 install-user: build
 	mkdir -p "$(USER_BIN_DIR)"
-	ln -sfn "$(CURDIR)/tools/bin/sshfleet" "$(USER_BIN_DIR)/sshfleet"
-	ln -sfn "$(CURDIR)/tools/bin/sshf" "$(USER_BIN_DIR)/sshf"
+	ln -sfn "$(CURDIR)/tools/launchers/sshfleet" "$(USER_BIN_DIR)/sshfleet"
+	ln -sfn "$(CURDIR)/tools/launchers/sshf" "$(USER_BIN_DIR)/sshf"
 	@if [ ! -e "$(USER_BIN_DIR)/sf" ] && [ ! -L "$(USER_BIN_DIR)/sf" ]; then \
-		ln -s "$(CURDIR)/tools/bin/sshfleet" "$(USER_BIN_DIR)/sf"; \
+		ln -s "$(CURDIR)/tools/launchers/sshfleet" "$(USER_BIN_DIR)/sf"; \
 	else \
 		printf '%s\n' 'SSH Fleet Console: sf already exists; optional alias was not changed'; \
 	fi

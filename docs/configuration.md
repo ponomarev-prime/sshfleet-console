@@ -63,7 +63,7 @@ application config в platform user-config directory. Точный group path м
 | `--max-concurrent N` | simultaneous probe ceiling |
 | `--refresh-interval DURATION` | probe interval, например `5s` |
 | `--list` | вывести resolved inventory и завершиться |
-| `--version` | короткая build version |
+| `-v`, `--version` | короткая build version; формы эквивалентны |
 | `version [--json]` | полная provenance |
 | `healthcheck [--strict]` | capabilities; aliases `doctor`, `checkhealth` |
 | `source add ...` | persistent source wizard/non-interactive add |
@@ -109,6 +109,7 @@ string values можно безопасно ввести в wizard prompts, но
   terminal echo, очищает buffers после использования и требует declared entry.
 - `sshfleet healthcheck [--config PATH] [--shell EXECUTABLE] [--shell-arg VALUE] [--strict]`; aliases: `doctor`,
   `checkhealth`. Strict возвращает non-zero и для missing optional capabilities.
+- `sshfleet -v` и `sshfleet --version` печатают одну компактную строку.
 - `sshfleet version [--json]` не обращается к Git: provenance уже в binary.
 
 ## Глобальный `[terminal]`
@@ -117,6 +118,7 @@ string values можно безопасно ввести в wizard prompts, но
 [terminal]
 default_shell = "auto"
 shell_args = []
+scrollback_lines = 10000
 ```
 
 Это оболочка только локальной рабочей станции. Она не меняет shell удалённого
@@ -134,6 +136,12 @@ application TOML → OS auto-detection. Linux/macOS auto сначала пров
 `shell_args` — массив argv, не строка shell-кода. Unicode и пробелы внутри
 отдельного аргумента сохраняются. Путь executable с пробелами допустим как
 явный path; `default_shell = "sh -c"` отклоняется строгой схемой.
+
+`scrollback_lines` задаёт число строк корректного VT-scrollback отдельно для
+каждой terminal tab. Допустимо `1..100000`, значение по умолчанию — `10000`.
+Это ограниченный буфер только в памяти процесса: он не сохраняется в config,
+session restore, logs или artifacts и удаляется при закрытии вкладки. Настройка
+не относится к короткому `LAST SESSION` в Preview, у которого отдельный лимит.
 
 CLI smoke без пользовательского SSH config:
 

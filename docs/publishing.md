@@ -1,22 +1,28 @@
 # Публикация SSH Fleet Console
 
-Этот документ — checklist первого публичного репозитория. Он не заменяет
-юридическую консультацию. До выполнения всех блокирующих пунктов исходный
-development repository и его tags нельзя отправлять в публичный GitHub.
+Этот документ фиксирует действующую public boundary, release checklist и
+правила публикации новых изменений. Он не заменяет юридическую консультацию.
+Private development history, обычные regression artifacts и реальные fleet
+screenshots по-прежнему нельзя отправлять в публичный GitHub.
 
 ## Текущий вердикт
 
-На 2026-08-31 Apache-2.0 подтверждена, core license inventory и release
-packaging готовы, но development repository **ещё нельзя публиковать как есть**:
+На 2026-09-02 проект опубликован как
+[`ponomarev-prime/sshfleet-console`](https://github.com/ponomarev-prime/sshfleet-console)
+из отдельной clean history. `dev` — default integration branch; `main` и tags
+`v*` защищены active rulesets. Environment `release` ограничен protected
+branch и требует ручного reviewer. Private vulnerability reporting и CodeQL
+включены. Первый проверенный release `v0.1.0` опубликован workflow 2026-08-31
+вместе с Linux amd64/arm64 archives, checksums и full regression evidence.
 
-1. Старые commits содержат локальные пути, названия частной инфраструктуры и
-   авторский email. Текущий tree очищен, а `gitleaks` не находит secrets, но
-   `push --mirror`, обычный push всей истории или `git push --tags` раскроет
-   исторические identifiers.
-2. Обычные `.artifacts/regression-*` предназначены для внутреннего evidence:
-   SVG и логи могут содержать абсолютные paths и пользовательский environment.
-3. GitHub rulesets, release environment и security features ещё не настроены,
-   потому что публичного remote пока нет.
+Эта готовность не отменяет границу данных:
+
+1. Private archive commits всё ещё содержат локальные identifiers; нельзя
+   делать `push --mirror`, `git push --tags` или подменять public history.
+2. Обычные `.artifacts/regression-*` остаются внутренним evidence: SVG и логи
+   могут содержать абсолютные paths и пользовательский environment.
+3. В public tree попадают только privacy-reviewed fixture screenshots и
+   source changes, прошедшие `make regression` и `make audit-public`.
 
 ## Рекомендуемая лицензия
 
@@ -43,10 +49,11 @@ Optional `lf`/`dtop`/Neovim/`bat` и скопированные host runtime lib
 
 ## Чистая публичная история
 
-Текущий `.git` остаётся приватным development archive. Первый public push
-делается из проверенного snapshot в новом staging repository, без старых
-commits и локальных archive tags. Каноническая команда сохраняет точное дерево
-исходного commit, включая gitlink pins optional toolchain:
+Private `.git` остаётся development archive. Первый public push уже был сделан
+из проверенного snapshot в отдельном staging repository, без старых commits и
+локальных archive tags. Процедура ниже сохраняется как воспроизводимый audit
+этой границы и recovery recipe. Она сохраняет точное дерево исходного commit,
+включая gitlink pins optional toolchain:
 
 ```sh
 # Выполнять только после добавления LICENSE/NOTICE и зелёного gate.
@@ -147,10 +154,10 @@ private RFC1918 addresses, затем складывает SVG/PNG в
 `.artifacts/public-screenshots/`. Рабочие имена остаются предметом обязательной
 человеческой проверки ниже.
 
-Для первого public snapshot вручную просмотрены и скопированы только четыре
-fixture-файла в `docs/assets/screenshots/`: Fleet overview, Actions menu,
-terminal tabs и groups. README ссылается только на эти tracked copies; обычные
-regression artifacts и остальные generated screenshots не входят в Git.
+В public tree вручную просмотрены и скопированы только fixture-файлы из
+`docs/assets/screenshots/`: Fleet overview, Actions menu, terminal tabs, groups
+и вычисляемый low-memory View. README ссылается только на эти tracked copies;
+обычные regression artifacts и остальные generated screenshots не входят в Git.
 
 Перед публикацией всё равно открыть каждый кадр и проверить:
 
@@ -164,7 +171,7 @@ regression artifacts и остальные generated screenshots не входя
 HOME, fixtures и documentation networks `192.0.2.0/24`, `198.51.100.0/24` или
 `203.0.113.0/24`.
 
-## Финальный go/no-go
+## Go/no-go каждого публичного изменения
 
 Публикация разрешена только когда одновременно:
 
@@ -176,5 +183,5 @@ HOME, fixtures и documentation networks `192.0.2.0/24`, `198.51.100.0/24` ил�
 4. GitHub rulesets, Actions, environment, immutable releases и security
    reporting проверены;
 5. public README screenshots просмотрены человеком;
-6. `v0.1.0` создаёт workflow на точном current `origin/main`, а не локальная
-   команда.
+6. новый `vX.Y.Z` создаёт workflow на точном current `origin/main`, а не
+   локальная команда.

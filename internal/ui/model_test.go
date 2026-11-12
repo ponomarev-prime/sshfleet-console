@@ -780,9 +780,21 @@ func TestDynamicContainerRefreshReplacesOnlyDynamicTargets(t *testing.T) {
 		t.Fatalf("dynamic sources = %#v", got.sources)
 	}
 	m.active = 1
-	blocked, _ := m.Update(dynamicSourcesMsg{hosts: []inventory.Host{newContainer}})
-	if len(blocked.(Model).hosts) != 2 || blocked.(Model).hosts[1].ID != oldContainer.ID {
-		t.Fatal("dynamic refresh mutated indices during an active probe sweep")
+	m.polling[static.ID] = true
+	m.probeRunning[static.ID] = true
+	m.queue = []string{oldContainer.ID}
+	refreshed, _ := m.Update(dynamicSourcesMsg{hosts: []inventory.Host{newContainer}})
+	got = refreshed.(Model)
+	if got.active != 1 || !got.probeRunning[static.ID] {
+		t.Fatal("refresh lost an active probe")
+	}
+	finished, _ := got.Update(probeMsg{id: static.ID, result: probe.Result{Status: probe.StatusOnline}})
+	got = finished.(Model)
+	if got.active != 0 || len(got.queue) != 0 {
+		t.Fatal("removed container remained queued")
+	}
+	if _, ok := got.results[oldContainer.ID]; ok {
+		t.Fatal("result rebound to removed container")
 	}
 }
 
@@ -1164,12 +1176,34 @@ func TestTerminalTabsOpenSwitchRenderAndKeepFleet(t *testing.T) {
 	}
 
 	m = updateWithKey(t, m, tea.Key{Code: 'g', Mod: tea.ModCtrl})
-	if m.activeTab != 0 || !strings.Contains(ansi.Strip(m.View().Content), "HOSTS") {
-		t.Fatalf("Ctrl+G did not return Fleet: active=%d\n%s", m.activeTab, ansi.Strip(m.View().Content))
+	if m.activeTab != 0 || !m.tabSelectMode || !strings.Contains(ansi.Strip(m.View().Content), "TAB SELECT  1…2 choose") {
+		t.Fatalf("Ctrl+G did not enter Fleet tab selection: active=%d mode=%v\n%s", m.activeTab, m.tabSelectMode, ansi.Strip(m.View().Content))
+	}
+	m = updateWithKey(t, m, tea.Key{Text: "9", Code: '9'})
+	if m.activeTab != 0 || !m.tabSelectMode || !strings.Contains(m.message, "Tab 9 is not open") {
+		t.Fatalf("invalid tab slot escaped selection mode: active=%d mode=%v message=%q", m.activeTab, m.tabSelectMode, m.message)
+	}
+	m = updateWithKey(t, m, tea.Key{Code: tea.KeyEsc})
+	if m.activeTab != 0 || m.tabSelectMode {
+		t.Fatalf("Esc did not cancel tab selection: active=%d mode=%v", m.activeTab, m.tabSelectMode)
+	}
+	m = updateWithKey(t, m, tea.Key{Text: "2", Code: '2'})
+	if m.activeTab != 0 {
+		t.Fatalf("plain digit switched tabs outside selection mode: active=%d", m.activeTab)
 	}
 	m = updateWithKey(t, m, tea.Key{Code: 'n', Mod: tea.ModCtrl})
 	if m.activeTab != 1 {
 		t.Fatalf("Ctrl+N active tab = %d", m.activeTab)
+	}
+	m = updateWithKey(t, m, tea.Key{Code: 'g', Mod: tea.ModCtrl})
+	m = updateWithKey(t, m, tea.Key{Text: "1", Code: '1'})
+	if m.activeTab != 0 {
+		t.Fatalf("Ctrl+G then 1 active tab = %d", m.activeTab)
+	}
+	m = updateWithKey(t, m, tea.Key{Code: 'g', Mod: tea.ModCtrl})
+	m = updateWithKey(t, m, tea.Key{Text: "2", Code: '2'})
+	if m.activeTab != 1 || m.tabSelectMode {
+		t.Fatalf("Ctrl+G then 2 active tab = %d mode=%v", m.activeTab, m.tabSelectMode)
 	}
 	m = updateWithKey(t, m, tea.Key{Code: 'p', Mod: tea.ModCtrl})
 	if m.activeTab != 0 {
@@ -1190,6 +1224,48 @@ func TestTerminalTabsOpenSwitchRenderAndKeepFleet(t *testing.T) {
 	m = updateWithKey(t, m, tea.Key{Code: '1', Mod: tea.ModAlt})
 	if m.activeTab != 0 {
 		t.Fatalf("Alt+1 active tab = %d", m.activeTab)
+	}
+}
+
+func TestTerminalTabMouseWheelUsesBoundedLocalScrollback(t *testing.T) {
+	m := New(nil, nil, openssh.Client{}, time.Minute, 2, WithTerminalConfig(config.TerminalConfig{ScrollbackLines: 7}))
+	m.width, m.height = 80, 10
+	opened, start := m.openTerminalTab(exec.Command("sh", "-c", "sleep 30"), -1, "Local shell", false)
+	m = opened.(Model)
+	started := start().(terminalTabStartedMsg)
+	if started.err != nil {
+		t.Fatal(started.err)
+	}
+	defer func() { _ = started.session.Close() }()
+	updated, _ := m.Update(started)
+	m = updated.(Model)
+	for i := 1; i <= 30; i++ {
+		_, _ = m.tabs[0].session.Terminal.Write([]byte(fmt.Sprintf("line-%02d\r\n", i)))
+	}
+	if got := m.tabs[0].session.Terminal.Scrollback().MaxLines(); got != 7 {
+		t.Fatalf("terminal scrollback limit = %d, want 7", got)
+	}
+	if got := m.tabs[0].session.Terminal.ScrollbackLen(); got != 7 {
+		t.Fatalf("retained scrollback = %d, want 7", got)
+	}
+	if got := m.View().MouseMode; got != tea.MouseModeCellMotion {
+		t.Fatalf("terminal mouse mode = %v", got)
+	}
+
+	updated, cmd := m.Update(tea.MouseWheelMsg{Button: tea.MouseWheelUp})
+	m = updated.(Model)
+	if cmd != nil || m.tabs[0].scrollOffset != terminalWheelLines {
+		t.Fatalf("wheel up = offset:%d cmd:%v", m.tabs[0].scrollOffset, cmd != nil)
+	}
+	view := ansi.Strip(m.View().Content)
+	if !strings.Contains(view, "SCROLL 3/7") || !strings.Contains(view, "line-") {
+		t.Fatalf("scrolled terminal view:\n%s", view)
+	}
+
+	updated, _ = m.Update(tea.MouseWheelMsg{Button: tea.MouseWheelDown})
+	m = updated.(Model)
+	if m.tabs[0].scrollOffset != 0 || strings.Contains(ansi.Strip(m.View().Content), "SCROLL ") {
+		t.Fatalf("wheel down did not return live: offset=%d\n%s", m.tabs[0].scrollOffset, ansi.Strip(m.View().Content))
 	}
 }
 
@@ -1492,7 +1568,7 @@ func TestKeyboardNavigationAndFiltering(t *testing.T) {
 		t.Fatalf("source = %d, want 1", m.source)
 	}
 	m = updateWithKey(t, m, tea.Key{Code: tea.KeyEnd})
-	if m.source != 2 {
+	if m.source != m.lastNavigationIndex() {
 		t.Fatalf("source = %d, want last", m.source)
 	}
 	m = updateWithKey(t, m, tea.Key{Code: tea.KeyHome})
@@ -1536,6 +1612,104 @@ func TestKeyboardNavigationAndFiltering(t *testing.T) {
 	m = updateWithKey(t, m, tea.Key{Code: tea.KeyEsc})
 	if m.filter != "" || len(m.visibleIndices()) != 3 {
 		t.Fatalf("Esc did not clear filter: %q", m.filter)
+	}
+}
+
+func TestGlobalHostSearchCrossesSourcesAndRestoresContext(t *testing.T) {
+	m := New(
+		[]inventory.Host{
+			{ID: "one:alpha", Alias: "alpha", Name: "Alpha API", SourceName: "one"},
+			{ID: "one:beta", Alias: "beta", Name: "Beta worker", SourceName: "one"},
+			{ID: "two:gamma", Alias: "gamma", Name: "Gamma Stand", SourceName: "two", Hostname: "192.0.2.20", User: "operator", Port: 2222, Tags: []string{"perf", "stand"}, Groups: []string{"Pregel"}},
+		},
+		[]inventory.SourceSummary{{Name: "one", Hosts: 2}, {Name: "two", Hosts: 1}},
+		openssh.Client{},
+		time.Minute,
+		2,
+	)
+	m.source = 1
+	m.selected = 1
+
+	m = updateWithKey(t, m, tea.Key{Text: "/", Code: '/'})
+	if !m.filtering || m.source != 0 || !m.searchReturnSet || m.searchReturnHostID != "one:beta" {
+		t.Fatalf("search start = filtering:%v source:%d return:%v/%q", m.filtering, m.source, m.searchReturnSet, m.searchReturnHostID)
+	}
+	for _, r := range "operator perf 192.0.2.20" {
+		m = updateWithKey(t, m, tea.Key{Text: string(r), Code: r})
+	}
+	visible := m.visibleIndices()
+	if len(visible) != 1 || m.hosts[visible[0]].ID != "two:gamma" {
+		t.Fatalf("global target search visible = %#v", visible)
+	}
+	view := ansi.Strip(m.renderHosts(120, 12))
+	if !strings.Contains(view, "source: two") {
+		t.Fatalf("global result does not expose source origin:\n%s", view)
+	}
+
+	m = updateWithKey(t, m, tea.Key{Code: tea.KeyEnter})
+	m = updateWithKey(t, m, tea.Key{Code: tea.KeyEsc})
+	visible = m.visibleIndices()
+	if m.filter != "" || m.filtering || m.source != 1 || m.selected != 1 || len(visible) != 2 || m.hosts[visible[m.selected]].ID != "one:beta" {
+		t.Fatalf("restored search context = filter:%q active:%v source:%d selected:%d visible:%#v", m.filter, m.filtering, m.source, m.selected, visible)
+	}
+}
+
+func TestGlobalHostSearchUsesResolvedTargetsGroupsAndContainerMetadata(t *testing.T) {
+	m := New(
+		[]inventory.Host{
+			{ID: "user:ssh-alias", Alias: "ssh-alias", SourceName: "user", Groups: []string{"Production"}},
+			{ID: "container:docker:abcdef", Alias: "web-box", SourceName: "containers · docker", Transport: inventory.TransportContainer, ContainerRuntime: "docker", ContainerID: "abcdef", ContainerImage: "registry.example/web:v2", ContainerStatus: "Up 2 hours"},
+		},
+		nil,
+		openssh.Client{},
+		time.Minute,
+		2,
+	)
+	m.effective["user:ssh-alias"] = openssh.Effective{Hostname: "srv.internal.example", User: "deploy", Port: "2202", ProxyJump: "bastion"}
+
+	for query, wantID := range map[string]string{
+		"deploy bastion 2202":        "user:ssh-alias",
+		"production internal":        "user:ssh-alias",
+		"docker registry.example v2": "container:docker:abcdef",
+	} {
+		m.filter = query
+		visible := m.visibleIndices()
+		if len(visible) != 1 || m.hosts[visible[0]].ID != wantID {
+			t.Errorf("query %q visible = %#v, want %s", query, visible, wantID)
+		}
+	}
+
+	m.filter = "нет-такого-хоста"
+	if visible := m.visibleIndices(); len(visible) != 0 {
+		t.Fatalf("no-match search visible = %#v", visible)
+	}
+	if view := ansi.Strip(m.renderHosts(100, 10)); !strings.Contains(view, "No hosts match global search") {
+		t.Fatalf("no-match view = %q", view)
+	}
+}
+
+func TestGlobalHostSearchRestoresGroupByNameAfterSourceRefresh(t *testing.T) {
+	host := inventory.Host{ID: "one:alpha", Alias: "alpha", SourceName: "one", Groups: []string{"stands"}}
+	m := New(
+		[]inventory.Host{host, {ID: "two:needle", Alias: "needle", SourceName: "two"}},
+		[]inventory.SourceSummary{{Name: "one", Hosts: 1}, {Name: "two", Hosts: 1}},
+		openssh.Client{},
+		time.Minute,
+		2,
+		WithGroupsAndCommands([]config.HostGroup{{Name: "stands", Members: []string{"one:alpha"}}}, nil),
+	)
+	m.source = len(m.sources) + 1
+	m.selected = 0
+	m.beginGlobalSearch()
+	m.filter = "needle"
+
+	// Dynamic discovery may insert a Source while search is active. Restoration
+	// must use the group name, not the obsolete numeric row index.
+	m.sources = append([]inventory.SourceSummary{{Name: "dynamic", Hosts: 0}}, m.sources...)
+	m.restoreSearchContext()
+	visible := m.visibleIndices()
+	if m.selectedGroup() != "stands" || len(visible) != 1 || m.hosts[visible[0]].ID != host.ID {
+		t.Fatalf("restored group = %q, visible = %#v", m.selectedGroup(), visible)
 	}
 }
 

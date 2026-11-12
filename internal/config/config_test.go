@@ -18,6 +18,7 @@ version = 1
 [terminal]
 default_shell = "fish"
 shell_args = ["-l", "значение с пробелом"]
+scrollback_lines = 4321
 
 [app]
 refresh_interval = "12s"
@@ -63,7 +64,7 @@ probe = false
 	if cfg.App.RefreshInterval.Duration != 12*time.Second {
 		t.Fatalf("refresh interval = %s", cfg.App.RefreshInterval.Duration)
 	}
-	if cfg.Terminal.DefaultShell != "fish" || len(cfg.Terminal.ShellArgs) != 2 || cfg.Terminal.ShellArgs[1] != "значение с пробелом" {
+	if cfg.Terminal.DefaultShell != "fish" || len(cfg.Terminal.ShellArgs) != 2 || cfg.Terminal.ShellArgs[1] != "значение с пробелом" || cfg.Terminal.ScrollbackLines != 4321 {
 		t.Fatalf("terminal settings = %#v", cfg.Terminal)
 	}
 	if cfg.App.ProbeEnabled || cfg.App.LoadUserSSHConfig || cfg.App.SourcesDir != "/tmp/sshfleet-sources" || cfg.App.GroupsDir != "/tmp/sshfleet-groups" || cfg.App.OverridesDir != "/tmp/sshfleet-hosts" || cfg.App.Editor != "nano" {
@@ -100,7 +101,7 @@ func TestRuntimeDefaultsFavorFastBoundedPolling(t *testing.T) {
 	if cfg.App.Editor != DefaultEditor {
 		t.Fatalf("default editor = %q", cfg.App.Editor)
 	}
-	if cfg.Terminal.DefaultShell != "auto" || len(cfg.Terminal.ShellArgs) != 0 {
+	if cfg.Terminal.DefaultShell != "auto" || len(cfg.Terminal.ShellArgs) != 0 || cfg.Terminal.ScrollbackLines != DefaultTerminalScrollbackLines {
 		t.Fatalf("terminal defaults = %#v", cfg.Terminal)
 	}
 	if cfg.App.UI.SourcesWidthPercent != DefaultSourcesWidthPercent || cfg.App.UI.PreviewWidthPercent != DefaultPreviewWidthPercent || cfg.App.UI.HostColumnPercent != DefaultHostColumnPercent {
@@ -120,8 +121,11 @@ func TestContainerShellPolicyFailsClosed(t *testing.T) {
 
 func TestTerminalConfigRejectsShellSyntaxAndUnsafeArgv(t *testing.T) {
 	for name, body := range map[string]string{
-		"shell-syntax": "version=1\n[terminal]\ndefault_shell=\"sh -c\"\n",
-		"empty-arg":    "version=1\n[terminal]\ndefault_shell=\"sh\"\nshell_args=[\"\"]\n",
+		"shell-syntax":         "version=1\n[terminal]\ndefault_shell=\"sh -c\"\n",
+		"empty-arg":            "version=1\n[terminal]\ndefault_shell=\"sh\"\nshell_args=[\"\"]\n",
+		"zero-scrollback":      "version=1\n[terminal]\nscrollback_lines=0\n",
+		"negative-scrollback":  "version=1\n[terminal]\nscrollback_lines=-1\n",
+		"excessive-scrollback": "version=1\n[terminal]\nscrollback_lines=100001\n",
 	} {
 		t.Run(name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "config.toml")
@@ -220,7 +224,7 @@ func TestEnsureAppConfigCreatesPrivateMinimalFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(data) != initialAppConfig || !strings.Contains(string(data), "HOSTS gets the remainder") || !strings.Contains(string(data), "host_column_percent = 30") || !strings.Contains(string(data), "default_shell = \"auto\"") {
+	if string(data) != initialAppConfig || !strings.Contains(string(data), "HOSTS gets the remainder") || !strings.Contains(string(data), "host_column_percent = 30") || !strings.Contains(string(data), "default_shell = \"auto\"") || !strings.Contains(string(data), "scrollback_lines = 10000") {
 		t.Fatalf("contents = %q", data)
 	}
 	if _, err := EnsureAppConfig(path); err != nil {

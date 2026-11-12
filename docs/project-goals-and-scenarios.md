@@ -112,7 +112,9 @@ SSH Fleet Console — терминальный менеджер SSH-ресурс
 30. Показывать read-only container inspection независимо от наличия shell:
     context/endpoint, immutable ID, image, health, command, mounts, networks,
     ports, restart policy и platform; отсутствие доступа к runtime не должно
-    выглядеть как пустой список.
+    выглядеть как пустой список. Health поддерживает Docker/Podman варианты полей;
+    отсутствующая проверка (not-configured) отличается от проверки без результата
+    (unknown), полученные starting/healthy/unhealthy сохраняются.
 31. Публиковать исходники и screenshots только из privacy-reviewed clean
     snapshot: private development history/archive tags и обычные regression
     artifacts не пересекают public boundary; LICENSE/NOTICE, dependency notices,
@@ -120,6 +122,11 @@ SSH Fleet Console — терминальный менеджер SSH-ресурс
 
 ## Базовая модель интерфейса
 
+- Выход из Fleet всегда требует подтверждения: первое q/Ctrl+C открывает диалог,
+  повторное q/Ctrl+C либо Enter/y подтверждает, Esc/n отменяет. Иная обычная клавиша
+  снимает запрос и продолжает навигацию. Первый запрос не отменяет фоновую работу.
+  Диалог предупреждает о завершении живых terminal tabs; выход происходит после
+  их штатного cleanup. В поиске/меню/живом терминале q сохраняет свой контекст.
 - `SOURCES` — узкий левый столбец. Первая строка всегда `All available`, ниже —
   каждый доступный источник и число узлов.
 - `HOSTS` — самый широкий и главный столбец. В заголовке находятся `CPU`, `MEM`,
@@ -134,7 +141,7 @@ SSH Fleet Console — терминальный менеджер SSH-ресурс
 - Интерфейс должен оставаться плоским и компактным, ближе к `lf`, без тяжёлых
   рамок и визуального шума.
 - `j/k`, стрелки, `g/G`, `h/l`, `Tab`, `/` и `Esc` обеспечивают клавиатурную
-  навигацию и фильтрацию.
+  навигацию и глобальный текстовый поиск host по всему fleet.
 - Во время embedded SSH session Preview временно расширяется за счёт `HOSTS`,
   оставляя fleet различимым; resize передаётся remote PTY. После закрытия
   исходные проценты `[app.ui]` восстанавливаются без изменения config.
@@ -144,7 +151,8 @@ SSH Fleet Console — терминальный менеджер SSH-ресурс
 В таблице hosts показываются:
 
 - лампочка/состояние доступности;
-- имя или алиас;
+- имя или алиас с connection context в квадратных скобках: SSH user/target/port
+  и маршрут ProxyJump либо container runtime/context/короткий immutable ID;
 - число CPU cores;
 - общий объём RAM;
 - общий объём swap или его отсутствие;
@@ -290,9 +298,12 @@ SSH Fleet Console — терминальный менеджер SSH-ресурс
 - Локальные эксперименты выполняются в ветках `sshfleet` внутри submodules. До
   публикации изменённый commit обязан быть отправлен в доступный remote fork,
   иначе основной репозиторий не должен ссылаться на недостижимый gitlink.
-- Общие настройки находятся в отслеживаемых `tools/config/*`. Launchers из
-  `tools/bin/*` выбирают эти настройки явно и не перезаписывают пользовательские
-  `~/.config`.
+- Общие настройки находятся в отслеживаемых `tools/config/*`. POSIX shell
+  source из `tools/launchers/*` выбирает эти настройки явно и не
+  перезаписывает пользовательские `~/.config`.
+- `tools/bin/` зарезервирован только для генерируемого/установочного layout,
+  игнорируется Git и проверяется public audit; executable shell source не
+  маскируется под build output.
 - Бинарники, Cargo/CMake build trees и установленный Neovim runtime находятся в
   `.toolchain/` и никогда не отслеживаются Git.
 - `dtop` собирается без self-update. Обновление любого инструмента — отдельное
@@ -445,6 +456,19 @@ agentless SSH navigator и не получает неограниченный у
 2. `All available` показывает объединённый fleet.
 3. Выбор source фильтрует hosts без потери поиска и selection safety.
 
+### C1. Глобальный текстовый поиск host
+
+1. Из любого Source или Group пользователь нажимает `/`; приложение запоминает
+   stable ID выбранного host и левый контекст, затем показывает live results из
+   всего fleet через `All available`.
+2. Регистронезависимый multi-term запрос ищет по alias/name, stable ID, source,
+   target/user/port/ProxyJump, tags/groups, transport и container metadata;
+   каждое слово запроса обязано совпасть.
+3. Строка результата явно показывает source, Preview обновляется для stable host,
+   а `Enter` открывает обычное Actions menu без изменения trust boundary.
+4. Очистка поиска восстанавливает прежние Source/Group и host; missing host после
+   reload обрабатывается безопасным выбором первой доступной строки.
+
 ### D. Меню действий по Enter
 
 1. Пользователь нажимает `Enter` на host.
@@ -458,9 +482,11 @@ agentless SSH navigator и не получает неограниченный у
 ### E. SSH terminal tab
 
 1. Постоянная Fleet tab остаётся доступна, а OpenSSH получает независимый PTY.
-2. Нумерация начинается с `1:Fleet`; основной `Alt+1…9` или дополнительный
-   `Ctrl+1…9` выбирает слот напрямую, `Ctrl+N`/`Ctrl+P` циклически переключают
-   сессии, `Ctrl+G` возвращает Fleet.
+2. Нумерация начинается с `1:Fleet`; основной бесконфликтный путь — `Ctrl+G`,
+   затем обычная `1…9`: приложение сразу возвращает Fleet, показывает
+   `TAB SELECT`, а цифра выбирает слот. `Esc` отменяет режим, `Ctrl+N`/`Ctrl+P`
+   циклически переключают сессии. `Alt+1…9` и `Ctrl+1…9` — только
+   terminal-dependent compatibility shortcuts.
 3. Normal exit активной сессии автоматически возвращает во Fleet, сохраняя
    final screen и явный `✓` в завершённой вкладке; `Ctrl+]` закрывает finished tab.
 4. Живой foreground process закрывается только повторным `Ctrl+]`; `Esc` отменяет.
@@ -472,6 +498,10 @@ agentless SSH navigator и не получает неограниченный у
 8. `Ctrl+D` — явное локальное быстрое закрытие: активная вкладка удаляется и
    Fleet показывается до ожидания остановки PTY; это не зависит от обработки EOF
    вложенным shell/TUI.
+9. Колесо мыши листает локальный VT-scrollback, не превращаясь в remote `↑/↓`;
+   footer показывает позицию, wheel down или начало ввода возвращают live-экран.
+   Размер отдельного RAM ring-buffer задаёт `[terminal].scrollback_lines` в
+   диапазоне `1..100000`, по умолчанию `10000`; содержимое не персистится.
 
 ### F. SSH внутри Preview
 
@@ -567,7 +597,7 @@ agentless SSH navigator и не получает неограниченный у
 2. Target собирает `lf`, `dtop`, Neovim и `bat` без `sudo`, помещает результат с
    Neovim runtime в игнорируемый `.toolchain/`, затем запускает smoke и PTY/config
    verification.
-3. `tools/bin/*` запускают эти бинарники с отслеживаемыми конфигами; `batcat`
+3. `tools/launchers/*` запускают эти бинарники с отслеживаемыми конфигами; `batcat`
    остаётся совместимым алиасом для Ubuntu.
 4. `make toolchain-smoke` сверяет source URL/SHA, наличие конфигов и launchers,
    затем запускает version checks всех готовых бинарников.
@@ -733,6 +763,9 @@ agentless SSH navigator и не получает неограниченный у
    не влияет на остальные, а disconnected/error/exit code остаются видимы.
 4. Tab metadata не содержит passwords, passphrases, private keys, tokens или
    shell history; restore допускает только безопасный non-secret context.
+5. Каждая tab имеет собственный bounded VT-scrollback; wheel управляет локальным
+   viewport и не отправляет shell-history keys. Scrollback живёт только в RAM,
+   не входит в metadata/restore/artifacts и уничтожается при закрытии tab.
 
 ## Правила безопасного поведения
 
@@ -778,6 +811,53 @@ cache, logs и argv; backup-first repair на disposable Docker sshd.
 
 ## Актуальный план развития
 
+Дополнение 12.11.2026 по результату использования лабораторной сборки: обычный
+запуск включает probes согласно конфигурации; --no-probe является только явным
+отключением. В таком режиме UI пишет probe disabled, а не waiting for probe.
+Первый Fleet-экран не ждёт inventory, container runtimes и optional tool health.
+Источники загружаются последовательно в фоне с состояниями loading/ready/error;
+готовые hosts, подписи и probe results появляются сразу. Очередь probes хранит
+stable ID и сначала обслуживает выбранный/видимый контекст. Dynamic discovery
+не голодает из-за длинного SSH sweep. Ошибка одного target не отменяет остальные.
+
+Каждый обычный запуск сохраняет private JSONL в XDG state directory: version,
+commit, first-view/config/source/runtime/tool timings, probe queue/status и
+готовность CPU/RAM. Логи не содержат aliases, usernames, addresses, credentials,
+raw SSH output, environment или команд. Target связывается с Preview через
+run-scoped log ref. Продуктовые defaults: 4 MiB на segment, один предыдущий
+segment, 10 завершённых запусков. Active/прерванные журналы не удаляются этим
+retention. --no-log отключает журнал; logs показывает последние записи.
+
+CPU% вычисляется по двум измерениям; до второго sample явно показывается CPU
+sampling. При отсутствии пригодного предыдущего счётчика worker делает не более
+одного повторного запроса через секунду, сохраняя свой слот max_concurrent: доступная
+цель получает первую delta до окончания всего fleet sweep. Навигация/действия не
+ждут probes; отмена приложения отменяет интервал и query. Неисправные счётчики не
+вызывают бесконечного приоритетного опроса, ошибка второго query не скрывается.
+Последующие refresh используют прежнюю общую очередь. Preview показывает load
+average 1/5/15m отдельно от CPU% и возраст sample. Неизвестные метрики не равны нулю.
+Доступность container runtime и inspect не считается наличием CPU/RAM
+контейнера: этот транспорт пока сообщает состояние, его resource stats не
+реализованы в этом изменении. Метрики SSH/local и startup latency проверяются
+отдельно от runtime inspection.
+
+Актуализация 12.11.2026: ближайшая функция - подписи целей в HOSTS.
+Контекст всегда показывается отдельной строкой под именем перед top process,
+включая короткие алиасы и широкий экран. Метрики сохраняются.
+OpenSSH resolution выполняется независимо от remote probes, с максимум четырьмя
+локальными ssh -G одновременно (не выше max_concurrent), кешем до reload или r
+и защитой от поздних результатов предыдущей конфигурации. Loading/ошибка
+видимы, DNS остаётся DNS, IPv6/port однозначны, ProxyCommand обозначается только
+как custom proxy без хранения raw command в UI. Direct localhost отличается от
+local sshd; контейнеры не получают выдуманные SSH user/IP. Display label не
+меняет identity, фактический transport или argv подключения.
+
+Следом развивать существующий buildinfo/JSON contract: schema version,
+одинаковые официальные build paths и честное unknown-state. Версионирование
+уже есть. Полный native platform support и дальнейшие epics остаются ниже;
+Web/Hub приостановлены. Кастомная сборка выпускается отдельно от установленного
+sshfleet и не переключает пользовательский launcher.
+
 Порядок учитывает дополнения из Outline и уже реализованный localhost/container
 MVP. Каждый этап завершается отдельным reviewable commit, обновлением
 документации и regression evidence; следующий этап не расширяет trust boundary
@@ -789,13 +869,18 @@ MVP. Каждый этап завершается отдельным reviewable 
 Разработка продолжается в `dev`; `main` принимает только проверенный release
 candidate через pull request. Ближайшие milestones выполняются в таком порядке:
 
-1. **Public launch и `v0.1.0`.** Включить GitHub rulesets/security, дождаться
-   зелёного CI на чистой публичной истории, проверить installation из release
-   candidate и только затем запустить защищённый Release workflow. Архивные
-   private tags не публикуются.
-2. **Fleet navigation + refresh contract.** Завершить
-   `SOURCES / GROUPS / VIEWS`: kind/origin/state, missing/duplicate members,
-   вычисляемые Views и multi-select membership. Одновременно зафиксировать
+1. **Public launch и `v0.1.0` — завершено 2026-08-31.** GitHub
+   rulesets/security включены; protected workflow выполнил полный regression,
+   public-history audit, reproducible packaging, ручное environment approval и
+   опубликовал immutable tag/release на commit `e9d40dc9694e316ddc1b761e343cfde9271b8d40`.
+   Скачанные release assets независимо прошли `sha256sum -c`. Публичная
+   витрина актуализирована 2026-09-02: добавлены понятные GitHub description и
+   topics, release/CI/license badges, безопасный быстрый старт и пятый
+   fixture-only PTY screenshot для Views. Короткий `sshfleet -v` закреплён как
+   эквивалент `sshfleet --version`.
+2. **Fleet navigation + refresh contract.** Built-in read-only Views завершены
+   2026-08-31; продолжить `SOURCES / GROUPS / VIEWS`: kind/origin/state,
+   missing/duplicate members и multi-select membership. Одновременно зафиксировать
    responsive refresh/logging UX: bounded workers, stale/backpressure states,
    last-known data и full logs без блокировки TUI. Это ближайший ежедневный
    пользовательский slice и он не изменяет исходные inventories.
@@ -881,8 +966,9 @@ CI с core smoke до интерактивных acceptance tests.
 
 ### Этап 2 — Sources/Groups/Views navigation
 
-**Groups MVP завершён 2026-08-30; Views и расширенный source status продолжаются.**
-Левая панель теперь визуально разделяет `SOURCES` и `GROUPS`. Private groups,
+**Groups MVP завершён 2026-08-30; built-in Views MVP завершён 2026-08-31;
+расширенный source status и multi-select продолжаются.**
+Левая панель теперь визуально разделяет `SOURCES`, `GROUPS` и `VIEWS`. Private groups,
 созданные из TUI, хранятся по одной в строгих mode-0600 fragments под
 `groups.d`; `n` создаёт, host `m` или Enter → `Manage group membership` меняет
 membership по stable `source:alias`, `R` переименовывает, `D` удаляет, `e`
@@ -890,25 +976,29 @@ membership по stable `source:alias`, `R` переименовывает, `D` �
 Main-config groups остаются read-only для CRUD. Storage/model и настоящий PTY
 проход с create → two memberships → rename → delete сохраняют screenshots.
 
-1. Перестроить левую панель на секции `SOURCES`, `GROUPS`, `VIEWS`, сохраняя
-   `HOSTS` главным и выбранный host/Preview при безопасном переключении.
-2. Добавить keyboard CRUD membership: create/rename/delete group, add/remove
-   host, move между private groups как `add target + remove source group`.
+1. **Завершено:** секции `SOURCES`, `GROUPS`, `VIEWS`, при этом `HOSTS` остаётся
+   главным, а selection восстанавливается по стабильному имени/ID.
+2. Keyboard CRUD create/rename/delete и add/remove завершён; остаются
+   multi-select и move между private groups как `add target + remove source group`.
 3. Показывать source kind/origin/path-or-URL, group membership и состояния
    loaded/loading/stale/partial/error без credential values.
-4. Добавить model + real PTY traversal/screenshots для duplicate aliases,
-   missing members, empty groups, unavailable source и group command plan.
+4. Model + real PTY traversal/screenshots уже покрывают Views, empty groups,
+   unavailable source и group command plan; остаются duplicate aliases и
+   missing members.
 
-Оставшаяся часть этапа: вычисляемые `VIEWS`, отдельные source state/origin rows,
-multi-select membership и явное отображение missing members/duplicate aliases.
+Built-in `VIEWS` (`Offline`, `Errors`, `CPU ≥ 80%`, `MEM ≤ 20%`, `Stale`)
+вычисляются из последнего probe/source state, имеют stable name-based selection,
+Preview для пустого состояния и настоящий PTY traversal со screenshots.
+Оставшаяся часть этапа: отдельные source kind/state/origin rows, multi-select
+membership и явное отображение missing members/duplicate aliases.
 
 ### Этап 3 — terminal tabs MVP
 
 **Завершён 2026-08-30 для Unix PTY; native ConPTY остаётся в cross-platform
 foundation.** Постоянная Fleet tab и несколько SSH/local/container/workspace/log
 tabs имеют независимые PTY/VT, resize, running/exited/error state, bounded tail,
-основной прямой выбор `Alt+1…9` с optional `Ctrl+1…9`, переключение
-`Ctrl+N/P`, возврат `Ctrl+G`,
+бесконфликтный прямой выбор `Ctrl+G` → обычная `1…9` с видимым режимом и
+отменой, optional compatibility `Alt+1…9`/`Ctrl+1…9`, переключение `Ctrl+N/P`,
 немедленное локальное закрытие `Ctrl+D`, автовозврат во Fleet после завершения
 активной сессии, terminal-local `q`,
 bracketed paste passthrough и подтверждаемое закрытие `Ctrl+]`.
@@ -1103,6 +1193,14 @@ persistence строится поверх готового terminal session mana
     upstream license texts; `make test-licenses` сверяет их с реально linked Go
     modules. Optional companion workspace остаётся отдельным local-only
     artifact и не получает ложного обещания готовности к redistribution.
+20. `/` выполняет глобальный multi-term поиск host поверх всех Sources/Groups,
+    показывает origin результата, открывает его обычное Actions menu и после
+    очистки восстанавливает прежний левый контекст и stable selection. Model и
+    настоящий PTY E2E проверяют cross-source target search, no-match и restore.
+21. Левая панель имеет read-only секцию `VIEWS`: `Offline`, `Errors`,
+    `CPU ≥ 80%`, `MEM ≤ 20%`, `Stale`. Выбор фильтрует HOSTS по последнему
+    состоянию, не меняет inventories/groups и восстанавливается по имени после
+    dynamic refresh и глобального поиска; model и PTY screenshots проверяют путь.
 
 ## Definition of Done
 

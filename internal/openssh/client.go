@@ -56,6 +56,7 @@ type Effective struct {
 	User                string
 	Port                string
 	ProxyJump           string
+	CustomProxy         bool // Never retain the executable ProxyCommand in UI state.
 	HostKeyAlias        string
 	IdentityFile        []string
 	UserKnownHostsFiles []string
@@ -157,6 +158,7 @@ func (c Client) Resolve(ctx context.Context, host inventory.Host) Effective {
 	args = append([]string{"-G"}, args...)
 	args = append(args, "--", host.Alias)
 	cmd := c.commandContext(ctx, host, args...)
+	cmd.WaitDelay = 250 * time.Millisecond
 	output, err := cmd.Output()
 	if err != nil {
 		return Effective{Error: err.Error()}
@@ -184,6 +186,8 @@ func parseEffective(output string) Effective {
 			if value != "none" {
 				effective.ProxyJump = value
 			}
+		case "proxycommand":
+			effective.CustomProxy = value != "" && value != "none"
 		case "hostkeyalias":
 			if value != "none" {
 				effective.HostKeyAlias = value
@@ -231,6 +235,7 @@ func (c Client) Probe(ctx context.Context, host inventory.Host) probe.Result {
 	)
 	cmd := c.commandContext(ctx, host, args...)
 	cmd.Stdin = strings.NewReader(probe.LinuxScript)
+	cmd.WaitDelay = 250 * time.Millisecond
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

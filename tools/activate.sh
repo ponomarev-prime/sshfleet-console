@@ -7,8 +7,8 @@ fi
 
 script_dir=$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 case ":$PATH:" in
-    *":$script_dir/bin:"*) ;;
-    *) PATH="$script_dir/bin:$PATH" ;;
+    *":$script_dir/launchers:"*) ;;
+    *) PATH="$script_dir/launchers:$PATH" ;;
 esac
 export PATH
 unset script_dir

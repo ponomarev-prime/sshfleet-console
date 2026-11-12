@@ -13,8 +13,8 @@ package_root="$test_root/package"
 mkdir -p "$package_root/bin" "$package_root/tools/bin"
 cp "$repo_root/install.sh" "$package_root/install.sh"
 cp "$repo_root/bin/sshfleet" "$package_root/bin/sshfleet"
-cp "$repo_root/tools/bin/sshfleet" "$package_root/tools/bin/sshfleet"
-cp "$repo_root/tools/bin/sshf" "$package_root/tools/bin/sshf"
+cp "$repo_root/tools/launchers/sshfleet" "$package_root/tools/bin/sshfleet"
+cp "$repo_root/tools/launchers/sshf" "$package_root/tools/bin/sshf"
 chmod 0755 "$package_root/install.sh" "$package_root/bin/sshfleet" \
     "$package_root/tools/bin/sshfleet" "$package_root/tools/bin/sshf"
 

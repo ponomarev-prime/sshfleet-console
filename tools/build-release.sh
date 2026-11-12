@@ -36,8 +36,8 @@ cd "$repo_root"
 SSHF_BUILD_VERSION=$version SSHF_BUILD_CHANNEL=$channel SSHF_BUILD_BRANCH=$branch \
     SSHF_BUILD_COMMIT=$head_commit CGO_ENABLED=0 GOOS=$target_os GOARCH=$target_arch \
     "$script_dir/build-sshf.sh" "$stage/bin/sshfleet"
-install -m 0755 "$repo_root/tools/bin/sshfleet" "$stage/tools/bin/sshfleet"
-install -m 0755 "$repo_root/tools/bin/sshf" "$stage/tools/bin/sshf"
+install -m 0755 "$repo_root/tools/launchers/sshfleet" "$stage/tools/bin/sshfleet"
+install -m 0755 "$repo_root/tools/launchers/sshf" "$stage/tools/bin/sshf"
 install -m 0755 "$repo_root/install.sh" "$stage/install.sh"
 install -m 0644 "$repo_root/README.md" "$stage/README.md"
 install -m 0644 "$repo_root/SECURITY.md" "$stage/SECURITY.md"

@@ -12,6 +12,7 @@ import (
 	"github.com/ponomarev-prime/sshfleet-console/internal/config"
 	"github.com/ponomarev-prime/sshfleet-console/internal/inventory"
 	"github.com/ponomarev-prime/sshfleet-console/internal/probe"
+	"github.com/ponomarev-prime/sshfleet-console/internal/runlog"
 	"github.com/ponomarev-prime/sshfleet-console/internal/session"
 )
 
@@ -37,6 +38,9 @@ var (
 )
 
 func (m Model) View() tea.View {
+	if m.firstView != nil {
+		m.firstView.Do(func() { m.log.Record(runlog.Event{Event: "ui.first_view"}) })
+	}
 	width, height := m.width, m.height
 	if width <= 0 {
 		width = 100
@@ -49,6 +53,7 @@ func (m Model) View() tea.View {
 		content := m.renderTabStrip(width) + "\n" + m.renderActiveTerminalTab(width, bodyHeight)
 		v := tea.NewView(content + "\n" + m.renderTerminalTabFooter(width))
 		v.AltScreen = true
+		v.MouseMode = tea.MouseModeCellMotion
 		v.WindowTitle = "SSH Fleet Console · terminal tab"
 		return v
 	}
@@ -99,9 +104,13 @@ func (m Model) View() tea.View {
 	if m.healthVisible {
 		content = m.overlayHealth(content, width, bodyHeight)
 	}
+	if m.quitConfirm {
+		content = m.overlayQuitPrompt(content, width, bodyHeight)
+	}
 
 	v := tea.NewView(m.renderTabStrip(width) + "\n" + content + "\n" + m.renderFooter(width))
 	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
 	v.WindowTitle = "SSH Fleet Console"
 	return v
 }
@@ -215,13 +224,16 @@ func (m Model) renderSources(width, height int) string {
 		selection int
 		text      string
 	}
-	renderItem := func(position int, entry item, group bool) string {
+	renderItem := func(position int, entry item, kind navigationKind) string {
 		icon := lipgloss.NewStyle().Foreground(colorGreen).Render("●")
 		count := fmt.Sprintf("%d", entry.count)
 		if position == 0 {
 			icon = lipgloss.NewStyle().Foreground(colorBlue).Render("◆")
 		}
 		switch entry.state {
+		case inventory.SourceStateLoading:
+			icon = mutedStyle.Render("◌")
+			count = "loading"
 		case inventory.SourceStateEmpty:
 			icon = mutedStyle.Render("○")
 			count = "empty"
@@ -242,10 +254,16 @@ func (m Model) renderSources(width, height int) string {
 			icon = lipgloss.NewStyle().Foreground(colorRed).Render("●")
 			count = "error"
 		}
-		if group {
+		if kind == navigationGroup {
 			icon = lipgloss.NewStyle().Foreground(colorPurple).Render("◇")
 			if entry.count == 0 {
 				icon = mutedStyle.Render("◇")
+			}
+		}
+		if kind == navigationView {
+			icon = lipgloss.NewStyle().Foreground(colorBlue).Render("◈")
+			if entry.count == 0 {
+				icon = mutedStyle.Render("◈")
 			}
 		}
 		nameWidth := max(1, width-ansi.StringWidth(icon)-ansi.StringWidth(count)-3)
@@ -262,7 +280,7 @@ func (m Model) renderSources(width, height int) string {
 	}
 	rows := make([]row, 0, len(items)+len(m.groups)+2)
 	for position, entry := range items {
-		rows = append(rows, row{selection: position, text: renderItem(position, entry, false)})
+		rows = append(rows, row{selection: position, text: renderItem(position, entry, navigationSource)})
 	}
 	groupHeader := titleStyle.Render(" GROUPS ")
 	groupHeader += titleStyle.Render(strings.Repeat("─", max(0, width-ansi.StringWidth(groupHeader))))
@@ -275,10 +293,17 @@ func (m Model) renderSources(width, height int) string {
 			}
 		}
 		position := len(items) + index
-		rows = append(rows, row{selection: position, text: renderItem(position, item{name: group, count: count}, true)})
+		rows = append(rows, row{selection: position, text: renderItem(position, item{name: group, count: count}, navigationGroup)})
 	}
 	if len(m.groups) == 0 {
 		rows = append(rows, row{selection: -1, text: mutedStyle.Render(truncate("  n create group", width))})
+	}
+	viewHeader := titleStyle.Render(" VIEWS ")
+	viewHeader += titleStyle.Render(strings.Repeat("─", max(0, width-ansi.StringWidth(viewHeader))))
+	rows = append(rows, row{selection: -1, text: viewHeader})
+	for index, view := range m.views {
+		position := len(items) + len(m.groups) + index
+		rows = append(rows, row{selection: position, text: renderItem(position, item{name: view.name, count: m.viewCount(view)}, navigationView)})
 	}
 	selectedRow := 0
 	for index, candidate := range rows {
@@ -302,29 +327,44 @@ func (m Model) renderSources(width, height int) string {
 func (m Model) renderHosts(width, height int) string {
 	visible := m.visibleIndices()
 	if len(visible) == 0 {
+		if m.startupLoading {
+			return mutedStyle.Render("Loading sources... Fleet is ready for navigation")
+		}
 		if m.filter != "" {
-			return mutedStyle.Render(truncate("No hosts match /"+m.filter, width))
+			return mutedStyle.Render(truncate("No hosts match global search /"+m.filter, width))
+		}
+		if _, ok := m.selectedView(); ok {
+			return mutedStyle.Render("No hosts in this view")
 		}
 		return mutedStyle.Render("No hosts in this source")
 	}
 	layout := newHostTableLayout(width, m.hostColumnPct)
 	selectedPos := min(m.selected, len(visible)-1)
-	capacity := max(1, (height-1)/2)
-	start := max(0, selectedPos-capacity/2)
-	if start+capacity > len(visible) {
-		start = max(0, len(visible)-capacity)
-	}
-	end := min(len(visible), start+capacity)
-
-	lines := []string{renderHostTableHeader(layout)}
-	for pos := start; pos < end; pos++ {
-		host := m.hosts[visible[pos]]
+	rows := make([][]string, len(visible))
+	for pos, index := range visible {
+		host := m.hosts[index]
 		result, ok := m.results[host.ID]
 		icon := m.statusIcon(host, result, ok)
 		metrics := renderHostMetrics(result, ok, layout)
-		line1 := icon + " " + padRight(truncate(session.CleanText(host.DisplayName()), layout.nameWidth), layout.nameWidth) + " " + metrics
+		name := session.CleanText(host.DisplayName())
+		connection := m.connectionLabel(host)
+		line1 := icon + " " + padRight(truncate(name, layout.nameWidth), layout.nameWidth) + " " + metrics
 		line1 = padRight(truncate(line1, width), width)
-		line2 := mutedStyle.Render(truncate("  "+session.CleanText(processText(host, result, ok)), width))
+		detail := session.CleanText(processText(host, result, ok))
+		if !ok && host.Probe {
+			if m.probeRunning[host.ID] {
+				detail = "probing..."
+			} else {
+				detail = "queued for probe"
+			}
+		}
+		if ok && result.Status == probe.StatusOnline && result.CPUCount > 0 && !result.CPUValid {
+			detail += " · CPU sampling"
+		}
+		if m.filter != "" {
+			detail = "source: " + session.CleanText(host.SourceName) + " · " + detail
+		}
+		line2 := mutedStyle.Render(truncate("  "+detail, width))
 		if pos == selectedPos {
 			if m.focus == focusHosts {
 				line1 = selectedHost.Render(ansi.Strip(line1))
@@ -332,7 +372,28 @@ func (m Model) renderHosts(width, height int) string {
 				line1 = selectedHostDim.Render(ansi.Strip(line1))
 			}
 		}
-		lines = append(lines, line1, line2)
+		rows[pos] = []string{line1, mutedStyle.Render(truncate("  "+connection, width)), line2}
+	}
+	// Connection context may add a row. Scroll by actual rendered height so
+	// keyboard selection remains visible without sacrificing the process row.
+	available := max(1, height-1)
+	start, used := selectedPos, len(rows[selectedPos])
+	for start > 0 && used+len(rows[start-1]) <= available/2 {
+		start--
+		used += len(rows[start])
+	}
+	lines := []string{renderHostTableHeader(layout)}
+	used = 0
+	for pos := start; pos < len(rows); pos++ {
+		if used+len(rows[pos]) > available && pos > start {
+			break
+		}
+		row := rows[pos][:min(len(rows[pos]), available-used)]
+		lines = append(lines, row...)
+		used += len(row)
+		if used >= available {
+			break
+		}
 	}
 	return strings.Join(lines, "\n")
 }
@@ -482,6 +543,11 @@ func (m Model) renderPreview(width, height int) string {
 		if group := m.selectedGroup(); group != "" {
 			return m.renderGroupPreview(group, width, height)
 		}
+		if view, ok := m.selectedView(); ok {
+			return titleStyle.Render(truncate(view.name, width)) + "\n" +
+				mutedStyle.Render(fmt.Sprintf("hosts: %d", m.viewCount(view))) + "\n\n" +
+				mutedStyle.Render(truncate(view.description, width))
+		}
 		return mutedStyle.Render("Select a host")
 	}
 	index := visible[min(m.selected, len(visible)-1)]
@@ -495,6 +561,10 @@ func (m Model) renderPreview(width, height int) string {
 	base := []string{
 		titleStyle.Render(truncate(session.CleanText(host.DisplayName()), width)),
 		line("alias", session.CleanText(host.Alias)),
+	}
+	base = append(base, mutedStyle.Render(ansi.Hardwrap(m.connectionLabel(host), max(1, width), true)))
+	if m.log != nil {
+		base = append(base, line("log ref", m.log.Ref(host.ID)))
 	}
 	if len(host.Tags) > 0 {
 		base = append(base, line("tags", strings.Join(host.Tags, ", ")))
@@ -523,7 +593,11 @@ func (m Model) renderPreview(width, height int) string {
 		if effective.Error != "" {
 			base = append(base, line("resolve", lipgloss.NewStyle().Foreground(colorRed).Render(effective.Error)))
 		} else {
-			base = append(base, line("target", effective.Summary()), line("proxy", valueOrDash(effective.ProxyJump)))
+			proxy := valueOrDash(effective.ProxyJump)
+			if effective.CustomProxy && effective.ProxyJump == "" {
+				proxy = "custom proxy"
+			}
+			base = append(base, line("target", effective.Summary()), line("proxy", proxy))
 			if len(effective.IdentityFile) > 0 {
 				base = append(base, line("identity", effective.IdentityFile[0]))
 			}
@@ -555,7 +629,13 @@ func (m Model) renderPreview(width, height int) string {
 	}
 	base = append(base, "", titleStyle.Render("HOST STATUS · "+statusScope))
 	if !hasResult {
-		base = append(base, mutedStyle.Render("Not probed yet"))
+		state := "Queued for probe"
+		if !host.Probe {
+			state = "Probe disabled"
+		} else if m.probeRunning[host.ID] {
+			state = "Probing..."
+		}
+		base = append(base, mutedStyle.Render(state))
 	} else if result.Status == probe.StatusGit {
 		base = append(base,
 			line("state", string(result.Status)),
@@ -577,6 +657,8 @@ func (m Model) renderPreview(width, height int) string {
 			line("state", string(result.Status)),
 			line("latency", result.Latency.Round(time.Millisecond).String()),
 			line("cpu", coreCountText(result.CPUCount)),
+			line("load avg 1/5/15m", fmt.Sprintf("%.2f %.2f %.2f", result.Load[0], result.Load[1], result.Load[2])),
+			line("sample age", ageText(result.CheckedAt)),
 			line("memory", capacityAvailabilityText(result.MemoryTotal, result.MemoryAvail)),
 			line("swap", swapText(result.SwapTotal, result.SwapAvail)),
 		)
@@ -933,8 +1015,13 @@ func overlayBlock(base, popup string, x, y, width, height int) string {
 }
 
 func (m Model) renderFooter(width int) string {
-	left := " Tab/h/l pane  j/k move  / filter  e host  c config  ? health  Enter actions  q quit "
-	if m.embedded != nil {
+	if m.quitConfirm {
+		return statusStyle.Render(padRight(truncate(" Quit? q/Enter/y yes | Esc/n cancel ", width), width))
+	}
+	left := " Tab/h/l pane  j/k move  / search  e host  c config  ? health  Enter actions  q quit "
+	if m.tabSelectMode {
+		left = fmt.Sprintf(" TAB SELECT  1…%d choose  Esc cancel ", min(9, len(m.tabs)+1))
+	} else if m.embedded != nil {
 		left = " PREVIEW TERMINAL  all keys go to target  Ctrl+] close "
 	} else if m.embeddedStarting {
 		left = " PREVIEW TERMINAL  starting…  Ctrl+C quit "
@@ -959,20 +1046,36 @@ func (m Model) renderFooter(width int) string {
 		} else if result, ok := m.results[hostID]; ok && result.Status == probe.StatusHostKey {
 			left = " Shift+K inspect host-key repair  Enter actions  q quit "
 		} else if ok && result.Status == probe.StatusGit {
-			left = " j/k move  / filter  e host  c config  r refresh  Enter actions  q quit "
+			left = " j/k move  / search  e host  c config  r refresh  Enter actions  q quit "
 		}
 	}
-	if m.selectedGroup() != "" && !m.groupCommandMenu && !m.filtering && m.groupDialog.mode == groupDialogNone {
-		left = " GROUP " + m.selectedGroup() + "  x command  R rename  D delete  e edit  Enter hosts "
-	} else if m.focus == focusSources && m.groupDialog.mode == groupDialogNone {
-		left = " SOURCES  j/k move  n new group  Enter hosts  ? health  q quit "
-	}
-	if m.filtering {
-		left = " filter: " + m.filter + "█  Enter apply  Esc close "
-	} else if m.filter != "" {
-		left = " /" + m.filter + "  Esc clear  Tab pane  Enter actions  q quit "
+	if !m.tabSelectMode {
+		if m.selectedGroup() != "" && !m.groupCommandMenu && !m.filtering && m.groupDialog.mode == groupDialogNone {
+			left = " GROUP " + m.selectedGroup() + "  x command  R rename  D delete  e edit  Enter hosts "
+		} else if view, ok := m.selectedView(); ok && !m.filtering && m.groupDialog.mode == groupDialogNone {
+			left = " VIEW " + view.name + "  Enter hosts  / search  r refresh  q quit "
+		} else if m.focus == focusSources && m.groupDialog.mode == groupDialogNone {
+			left = " SOURCES  j/k move  n new group  Enter hosts  ? health  q quit "
+		}
+		if m.filtering {
+			left = " global host search: " + m.filter + "█  Enter apply  Esc close "
+		} else if m.filter != "" {
+			left = " global /" + m.filter + "  Esc restore  Enter actions  q quit "
+		}
 	}
 	right := ""
+	progressVisible := !m.filtering && m.filter == "" && !m.actionMenu && !m.groupCommandMenu && m.groupDialog.mode == groupDialogNone && !m.tabSelectMode
+	if m.startupLoading && progressVisible {
+		loaded := 0
+		for _, source := range m.sources {
+			if source.State != inventory.SourceStateLoading {
+				loaded++
+			}
+		}
+		left = fmt.Sprintf(" Loading sources %d/%d | probes checked %d/%d | / search  q quit ", loaded, len(m.sources), len(m.results), len(m.hosts))
+	} else if progressVisible && (m.active > 0 || len(m.queue) > 0) {
+		left = fmt.Sprintf(" Probes: %d ready, %d running, %d queued | j/k move  / search  Enter actions  q quit ", len(m.results), m.active, len(m.queue))
+	}
 	if m.active > 0 {
 		right = fmt.Sprintf("polling %d/%d ", m.active, m.active+len(m.queue))
 	} else if !m.lastRefresh.IsZero() {
@@ -980,6 +1083,9 @@ func (m Model) renderFooter(width int) string {
 	}
 	if m.message != "" {
 		right = truncate(session.CleanText(m.message), max(10, width/2)) + " "
+	}
+	if m.log != nil && right == "" {
+		right = "log: " + m.log.Path() + " "
 	}
 	space := max(1, width-ansi.StringWidth(left)-ansi.StringWidth(right))
 	return statusStyle.Render(padRight(truncate(left+strings.Repeat(" ", space)+right, width), width))
@@ -1133,6 +1239,9 @@ func processText(host inventory.Host, result probe.Result, ok bool) string {
 		return strings.Join(parts, " · ")
 	}
 	if !ok {
+		if !host.Probe {
+			return "probe disabled"
+		}
 		return "waiting for probe"
 	}
 	if result.Status == probe.StatusGit {

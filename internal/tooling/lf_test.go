@@ -14,7 +14,7 @@ func TestLFOpenUsesBatAndPagesOnlyAboveFiftyLines(t *testing.T) {
 		t.Skip("POSIX companion helpers are not shipped on Windows")
 	}
 	repo := repositoryRoot(t)
-	helper := filepath.Join(repo, "tools", "bin", "sshfleet-open")
+	helper := filepath.Join(repo, "tools", "launchers", "sshfleet-open")
 	fakeBin := t.TempDir()
 	logPath := filepath.Join(t.TempDir(), "bat.log")
 	writeExecutable(t, filepath.Join(fakeBin, "bat"), "#!/bin/sh\nprintf '%s\\n' \"${BAT_PAGER:-}|$*\" > \"$SSHFLEET_TEST_LOG\"\n")
@@ -46,7 +46,7 @@ func TestLFEditorUsesExplicitOverrideThenNvimVimNano(t *testing.T) {
 		t.Skip("POSIX companion helpers are not shipped on Windows")
 	}
 	repo := repositoryRoot(t)
-	helper := filepath.Join(repo, "tools", "bin", "sshfleet-editor")
+	helper := filepath.Join(repo, "tools", "launchers", "sshfleet-editor")
 	fakeBin := t.TempDir()
 	logPath := filepath.Join(t.TempDir(), "editor.log")
 	for _, name := range []string{"nvim", "vim", "nano"} {

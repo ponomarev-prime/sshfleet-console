@@ -233,6 +233,10 @@ func (m Model) executeHostAction(index int, action hostActionKind) (tea.Model, t
 		m.message = "Starting terminal in Preview…"
 		return m, startEmbeddedCmd(cmd, index, host.Alias, width, height)
 	case actionGroupMembership:
+		if m.startupLoading {
+			m.message = "Wait for sources to finish loading before editing groups"
+			return m, nil
+		}
 		return m.openMembershipGroupAt(index)
 	case actionGitCheck:
 		cmd, err := m.client.GitAccessCommand(host)
@@ -261,14 +265,19 @@ func (m Model) executeHostAction(index int, action hostActionKind) (tea.Model, t
 		}
 		m.polling[host.ID] = true
 		if m.active >= m.maxConcurrent {
-			m.queue = append(m.queue, index)
+			m.queue = append(m.queue, host.ID)
 			m.message = "Refresh queued for " + host.Alias
 			return m, nil
 		}
 		m.active++
+		m.probeRunning[host.ID] = true
 		m.message = "Refreshing " + host.Alias + "…"
 		return m, m.probeCmd(index)
 	case actionEditHost:
+		if m.startupLoading {
+			m.message = "Wait for sources to finish loading before editing"
+			return m, nil
+		}
 		if m.reload == nil {
 			m.message = "Host overlay editor is not configured"
 			return m, nil
@@ -290,6 +299,10 @@ func (m Model) executeHostAction(index int, action hostActionKind) (tea.Model, t
 		m.message = "Editing overlay: " + path
 		return m, editHostCmd(cmd, host.ID, path, m.reload)
 	case actionEditSource:
+		if m.startupLoading {
+			m.message = "Wait for sources to finish loading before editing"
+			return m, nil
+		}
 		if m.reload == nil || host.ConfigPath == "" || host.ConfigPath == os.DevNull {
 			m.message = "Selected host has no editable local SSH config"
 			return m, nil

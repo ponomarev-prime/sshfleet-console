@@ -16,6 +16,10 @@ import (
 
 const maxRuntimeOutput = 8 << 20
 
+type inspectHealth struct {
+	Status string `json:"Status"`
+}
+
 type inspectRecord struct {
 	ID           string   `json:"Id"`
 	IDUpper      string   `json:"ID"`
@@ -29,16 +33,18 @@ type inspectRecord struct {
 	OSUpper      string   `json:"OS"`
 	Architecture string   `json:"Architecture"`
 	Config       struct {
-		Image      string          `json:"Image"`
-		Entrypoint json.RawMessage `json:"Entrypoint"`
-		Cmd        json.RawMessage `json:"Cmd"`
+		Image       string          `json:"Image"`
+		Entrypoint  json.RawMessage `json:"Entrypoint"`
+		Cmd         json.RawMessage `json:"Cmd"`
+		Healthcheck *struct {
+			Test []string `json:"Test"`
+		} `json:"Healthcheck"`
 	} `json:"Config"`
 	State struct {
-		Status  string `json:"Status"`
-		Running bool   `json:"Running"`
-		Health  *struct {
-			Status string `json:"Status"`
-		} `json:"Health"`
+		Status      string         `json:"Status"`
+		Running     bool           `json:"Running"`
+		Health      *inspectHealth `json:"Health"`
+		Healthcheck *inspectHealth `json:"Healthcheck"`
 	} `json:"State"`
 	HostConfig struct {
 		RestartPolicy struct {
@@ -242,10 +248,20 @@ func applyInspection(host *inventory.Host, record inspectRecord) {
 	if value := cleanBounded(record.State.Status, 64); value != "" {
 		host.ContainerState = value
 	}
-	if record.State.Health != nil {
-		host.ContainerHealth = cleanBounded(record.State.Health.Status, 64)
-	} else {
+	host.ContainerHealth = ""
+	for _, state := range []*inspectHealth{record.State.Health, record.State.Healthcheck} {
+		if state != nil {
+			if status := cleanBounded(state.Status, 64); status != "" {
+				host.ContainerHealth = status
+				break
+			}
+		}
+	}
+	if host.ContainerHealth == "" {
 		host.ContainerHealth = "not-configured"
+		if check := record.Config.Healthcheck; check != nil && len(check.Test) > 0 && !strings.EqualFold(check.Test[0], "NONE") {
+			host.ContainerHealth = "unknown"
+		}
 	}
 	entrypoint := decodeStringList(record.Config.Entrypoint)
 	if len(entrypoint) == 0 && record.Path != "" {

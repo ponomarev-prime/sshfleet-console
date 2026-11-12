@@ -48,10 +48,16 @@ type Config struct {
 type TerminalConfig struct {
 	DefaultShell    string   `toml:"default_shell"`
 	ShellArgs       []string `toml:"shell_args,omitempty"`
+	ScrollbackLines int      `toml:"scrollback_lines"`
 	EffectiveShell  string   `toml:"-"`
 	EffectiveArgs   []string `toml:"-"`
 	EffectiveOrigin string   `toml:"-"`
 }
+
+const (
+	DefaultTerminalScrollbackLines = 10000
+	MaxTerminalScrollbackLines     = 100000
+)
 
 type AppConfig struct {
 	RefreshInterval    Duration        `toml:"refresh_interval"`
@@ -186,8 +192,11 @@ type Command struct {
 
 func Defaults() Config {
 	return Config{
-		Version:  CurrentVersion,
-		Terminal: TerminalConfig{DefaultShell: platform.ShellAuto},
+		Version: CurrentVersion,
+		Terminal: TerminalConfig{
+			DefaultShell:    platform.ShellAuto,
+			ScrollbackLines: DefaultTerminalScrollbackLines,
+		},
 		App: AppConfig{
 			RefreshInterval:    Duration{Duration: 10 * time.Second},
 			ConnectTimeout:     Duration{Duration: 6 * time.Second},
@@ -512,6 +521,9 @@ func (c *TerminalConfig) normalize() error {
 		if arg == "" || containsControl(arg) {
 			return fmt.Errorf("terminal.shell_args[%d] is empty or contains control characters", i)
 		}
+	}
+	if c.ScrollbackLines < 1 || c.ScrollbackLines > MaxTerminalScrollbackLines {
+		return fmt.Errorf("terminal.scrollback_lines must be between 1 and %d", MaxTerminalScrollbackLines)
 	}
 	return nil
 }

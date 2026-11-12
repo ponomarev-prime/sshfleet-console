@@ -4,7 +4,7 @@ set -eu
 script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH='' cd -- "$script_dir/../.." && pwd)
 
-PATH="$repo_root/tools/bin:$repo_root/.toolchain/bin:$PATH"
+PATH="$script_dir:$repo_root/.toolchain/bin:$PATH"
 EDITOR=sshfleet-editor
 export PATH EDITOR
 

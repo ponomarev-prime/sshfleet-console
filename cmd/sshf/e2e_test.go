@@ -211,9 +211,115 @@ source = "fixture"
 	h.waitForAfter(mark, "EDITOR-ARROW-OK", 5*time.Second)
 	h.waitForAfter(mark, "Config saved; restart SSH Fleet Console to apply", 5*time.Second)
 
-	h.send("q")
+	h.quit()
 	if err := h.wait(5 * time.Second); err != nil {
 		t.Fatalf("sshf did not exit cleanly: %v\n%s", err, h.tail(4000))
+	}
+}
+
+func TestTUIEndToEndGlobalHostSearchAcrossSources(t *testing.T) {
+	dir := t.TempDir()
+	fakeSSH := filepath.Join(dir, "fake-ssh")
+	primaryInventory := filepath.Join(dir, "primary.toml")
+	secondaryInventory := filepath.Join(dir, "secondary.toml")
+	configPath := filepath.Join(dir, "config.toml")
+
+	writeExecutable(t, fakeSSH, `#!/bin/sh
+alias_name=""
+for arg do alias_name="$arg"; done
+case " $* " in
+  *" -G "*)
+    printf 'hostname %s.example\nuser fixture\nport 22\n' "$alias_name"
+    exit 0
+    ;;
+esac
+exit 0
+`)
+	writeFile(t, primaryInventory, `version = 1
+
+[[hosts]]
+alias = "alpha-only"
+name = "Alpha only"
+hostname = "192.0.2.10"
+user = "root"
+tags = ["development"]
+probe = false
+`, 0o600)
+	writeFile(t, secondaryInventory, `version = 1
+
+[[hosts]]
+alias = "needle-202"
+name = "Needle Host"
+hostname = "192.0.2.77"
+user = "deploy"
+port = 2222
+tags = ["perf", "stand"]
+probe = false
+`, 0o600)
+	writeFile(t, configPath, fmt.Sprintf(`version = 1
+
+[app]
+refresh_interval = "1h"
+connect_timeout = "1s"
+max_concurrent = 2
+ssh_binary = %q
+
+[app.containers]
+enabled = false
+
+[[sources]]
+name = "primary"
+kind = "inventory"
+path = %q
+
+[[sources]]
+name = "secondary"
+kind = "inventory"
+path = %q
+`, fakeSSH, primaryInventory, secondaryInventory), 0o600)
+
+	binary := resolveE2EBinary(t, dir)
+	command := exec.Command(binary,
+		"--config", configPath,
+		"--no-user-ssh-config",
+		"--no-probe",
+		"--sources-dir", filepath.Join(dir, "sources.d"),
+		"--groups-dir", filepath.Join(dir, "groups.d"),
+		"--overrides-dir", filepath.Join(dir, "hosts.d"),
+	)
+	command.Env = append(os.Environ(), "TERM=xterm-256color")
+	terminal, err := pty.StartWithSize(command, &pty.Winsize{Rows: 30, Cols: 150})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := newPTYHarness(t, command, terminal, 150, 30)
+	defer h.close()
+
+	h.waitForScreen("Alpha only", 8*time.Second)
+	h.send("h\033[B\r")
+	h.waitForScreen("Alpha only", 3*time.Second)
+	h.waitForScreenGone("Needle Host", 3*time.Second)
+	h.screenshot("global-search-source-scope")
+
+	h.send("/deploy perf 192.0.2.77\r")
+	h.waitForScreen("Needle Host", 5*time.Second)
+	h.waitForScreen("source: secondary", 5*time.Second)
+	h.waitForScreen("global /deploy perf 192.0.2.77", 5*time.Second)
+	h.screenshot("global-search-result")
+
+	h.send("\r")
+	h.waitForScreen("ACTIONS · Needle Host", 3*time.Second)
+	h.screenshot("global-search-action-menu")
+	h.send("\033")
+	h.waitForScreenGone("ACTIONS · Needle Host", 3*time.Second)
+	h.send("\033")
+	h.waitForScreen("Alpha only", 5*time.Second)
+	h.waitForScreenGone("Needle Host", 3*time.Second)
+	h.screenshot("global-search-restored-source")
+
+	h.quit()
+	if err := h.wait(5 * time.Second); err != nil {
+		t.Fatalf("sshfleet did not exit after global search: %v\n%s", err, h.tail(4000))
 	}
 }
 
@@ -222,11 +328,14 @@ func TestTUIRealNeovimReceivesArrowKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	nvim := filepath.Join(repoRoot, "tools", "bin", "nvim")
+	nvim := filepath.Join(repoRoot, "tools", "launchers", "nvim")
 	if info, err := os.Stat(filepath.Join(repoRoot, ".toolchain", "bin", "nvim")); err != nil || info.Mode().Perm()&0o111 == 0 {
 		var lookupErr error
 		nvim, lookupErr = exec.LookPath("nvim")
 		if lookupErr != nil {
+			if os.Getenv("SSHF_REQUIRE_NVIM_E2E") == "1" {
+				t.Fatal("Neovim is required for the full regression editor PTY scenario")
+			}
 			t.Skip("Neovim is unavailable; generic editor TTY transfer remains covered by the main PTY E2E")
 		}
 	}
@@ -266,6 +375,7 @@ host_column_percent = 30
 	h := newPTYHarness(t, command, terminal, 120, 30)
 	defer h.close()
 	h.waitForScreen("GROUPS", 8*time.Second)
+	h.waitForScreenGone("Loading sources", 8*time.Second)
 	h.send("c")
 	h.waitForScreen("host_column_percent", 8*time.Second)
 	h.send("\033[B")
@@ -288,7 +398,7 @@ host_column_percent = 30
 	}
 	h.send(":q!\r")
 	h.waitForScreen("Config saved; restart", 5*time.Second)
-	h.send("q")
+	h.quit()
 	if err := h.wait(5 * time.Second); err != nil {
 		t.Fatalf("sshf did not exit after Neovim: %v\n%s", err, h.tail(4000))
 	}
@@ -335,7 +445,7 @@ printf '%s\n' \
   'cpu_idle=900' \
   'cpu_count=8' \
   'mem_total_kb=33554432' \
-  'mem_available_kb=16777216' \
+	  'mem_available_kb=16777216' \
   'swap_total_kb=8388608' \
   'swap_available_kb=4194304' \
   'root_total_kb=67108864' \
@@ -429,6 +539,23 @@ max_concurrent = 2
 				h.assertHeaderAt("PREVIEW", 115)
 			}
 
+			// Built-in Views are part of the same real left-pane traversal. This
+			// shared public-screenshot fixture intentionally keeps ordinary host
+			// metrics; threshold filtering has a dedicated private E2E below.
+			h.send("hG")
+			h.waitForScreen("VIEWS", 3*time.Second)
+			h.waitForScreen("Stale", 3*time.Second)
+			if size.name == "wide" {
+				h.waitForScreen("Targets retained", 3*time.Second)
+			}
+			h.screenshot(size.name + "-views-stale-empty")
+			h.send("gl")
+			if size.name == "wide" {
+				h.waitForScreen("All available", 3*time.Second)
+			} else {
+				h.waitForScreen("alpha", 3*time.Second)
+			}
+
 			h.send("?")
 			h.waitForScreen("APPLICATION HEALTHCHECK", 3*time.Second)
 			h.waitForScreen("editor", 3*time.Second)
@@ -483,12 +610,15 @@ max_concurrent = 2
 			// nor become a Fleet hotkey while the terminal tab is active.
 			h.send("q")
 			h.waitForScreen("› 2:SSH · alpha", 3*time.Second)
-			h.send("\0331") // Alt+1: permanent Fleet tab.
+			h.send("\a") // Ctrl+G: Fleet plus conflict-free tab selection mode.
+			h.waitForScreen("TAB SELECT", 3*time.Second)
+			h.screenshot(size.name + "-terminal-tab-select")
+			h.send("1")
 			h.waitForScreen("› 1:Fleet", 5*time.Second)
 			h.send("\r\r")
 			h.waitForScreen("3:SSH · alpha", 5*time.Second)
 			h.screenshot(size.name + "-terminal-tab-2")
-			h.send("\0332") // Alt+2: first terminal tab.
+			h.send("\a2") // Ctrl+G, then 2: first terminal tab.
 			h.waitForScreen("› 2:SSH · alpha", 5*time.Second)
 			// A real outer bracketed paste must cross Bubble Tea as one PasteMsg
 			// and reach the nested PTY without becoming SSH Fleet hotkeys.
@@ -496,7 +626,7 @@ max_concurrent = 2
 			h.waitForScreen("qfirst-tab-exit", 5*time.Second)
 			h.waitForScreen("› 1:Fleet", 5*time.Second)
 			h.screenshot(size.name + "-terminal-tab-paste")
-			h.send("\0333") // Alt+3: second terminal tab.
+			h.send("\a3") // Ctrl+G, then 3: second terminal tab.
 			h.waitForScreen("› 3:SSH · alpha", 5*time.Second)
 			h.send("second-tab-exit\r")
 			h.waitForScreen("second-tab-exit", 5*time.Second)
@@ -541,11 +671,102 @@ max_concurrent = 2
 			h.waitForScreenGone("TERMINAL · alpha · Ctrl+]", 5*time.Second)
 			h.waitForScreen("fixture:embedded-ex", 5*time.Second)
 
-			h.send("q")
+			h.quit()
 			if err := h.wait(5 * time.Second); err != nil {
 				t.Fatalf("sshf did not exit cleanly: %v\n%s", err, h.tail(4000))
 			}
 		})
+	}
+}
+
+func TestTUIEndToEndComputedViews(t *testing.T) {
+	dir := t.TempDir()
+	fakeSSH := filepath.Join(dir, "fake-ssh")
+	sshConfig := filepath.Join(dir, "ssh_config")
+	configPath := filepath.Join(dir, "config.toml")
+	binary := filepath.Join(dir, "sshfleet")
+
+	writeExecutable(t, fakeSSH, `#!/bin/sh
+alias_name=""
+for arg do alias_name="$arg"; done
+case " $* " in
+  *" -G "*)
+    printf 'hostname %s.example\nuser root\nport 22\n' "$alias_name"
+    exit 0
+    ;;
+esac
+mem_available=6291456
+case " $* " in
+  *" low-memory "*) mem_available=524288 ;;
+esac
+printf '%s\n' \
+  'cpu_total=1200' \
+  'cpu_idle=900' \
+  'cpu_count=4' \
+  'mem_total_kb=8388608' \
+  "mem_available_kb=$mem_available" \
+  'swap_total_kb=2097152' \
+  'swap_available_kb=1048576' \
+  'root_total_kb=16777216' \
+  'root_available_kb=8388608' \
+  'load=0.10 0.20 0.30' \
+  'uptime_seconds=3600' \
+  'process=42|S|fixture|1.5' \
+  'os_name=Fixture Linux' \
+  'kernel=Linux 6.12.0' \
+  'architecture=x86_64'
+`)
+	writeFile(t, sshConfig, `Host calm low-memory
+    HostName %h.example
+    User root
+`, 0o600)
+	writeFile(t, configPath, fmt.Sprintf(`version = 1
+
+[app]
+refresh_interval = "1h"
+connect_timeout = "1s"
+max_concurrent = 2
+ssh_binary = %q
+
+[app.containers]
+enabled = false
+
+[[sources]]
+name = "fixture"
+kind = "ssh_config"
+path = %q
+`, fakeSSH, sshConfig), 0o600)
+
+	binary = resolveE2EBinary(t, dir)
+	command := exec.Command(binary,
+		"--config", configPath,
+		"--no-user-ssh-config",
+		"--groups-dir", filepath.Join(dir, "groups.d"),
+		"--overrides-dir", filepath.Join(dir, "hosts.d"),
+	)
+	command.Env = append(os.Environ(), "TERM=xterm-256color")
+	terminal, err := pty.StartWithSize(command, &pty.Winsize{Rows: 30, Cols: 140})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := newPTYHarness(t, command, terminal, 140, 30)
+	defer h.close()
+
+	h.waitForScreen("low-memory", 8*time.Second)
+	h.waitForScreen("updated now", 8*time.Second)
+	h.send("hGk\r") // Stale → MEM ≤ 20% → HOSTS.
+	h.waitForScreen("MEM ≤ 20%", 3*time.Second)
+	h.waitForScreen("low-memory", 3*time.Second)
+	h.waitForScreenGone("● calm", 3*time.Second)
+	h.screenshot("views-low-memory-filtered")
+
+	h.send("hG")
+	h.waitForScreen("Stale", 3*time.Second)
+	h.waitForScreen("No hosts in this view", 3*time.Second)
+	h.screenshot("views-stale-empty")
+	h.quit()
+	if err := h.wait(5 * time.Second); err != nil {
+		t.Fatalf("sshfleet did not exit after Views traversal: %v\n%s", err, h.tail(4000))
 	}
 }
 
@@ -640,7 +861,7 @@ path = %q
 	h.waitForScreen("demo-02 added", 3*time.Second)
 
 	// Select the group, verify both members, then rename and delete it.
-	h.send("hG")
+	h.send("hjj")
 	h.waitForScreen("demo-stands", 3*time.Second)
 	h.screenshot("groups-two-members")
 	h.send("R")
@@ -663,7 +884,7 @@ path = %q
 	h.waitForScreen("n create group", 3*time.Second)
 	h.screenshot("groups-deleted")
 
-	h.send("q")
+	h.quit()
 	if err := h.wait(5 * time.Second); err != nil {
 		t.Fatalf("sshf did not exit cleanly: %v\n%s", err, h.tail(4000))
 	}
@@ -754,7 +975,7 @@ shell_priority = ["/bin/sh"]
 	h.waitForScreen("container-log-line", 5*time.Second)
 	h.waitForScreen("› 1:Fleet", 5*time.Second)
 	h.screenshot("container-logs-tab")
-	h.send("q")
+	h.quit()
 	if err := h.wait(5 * time.Second); err != nil {
 		t.Fatalf("sshf did not exit cleanly: %v\n%s", err, h.tail(4000))
 	}
@@ -767,6 +988,11 @@ func TestTUIEndToEndTrustedLocalConfigMenuAndPreview(t *testing.T) {
 	configPath := filepath.Join(dir, "config.toml")
 	binary := filepath.Join(dir, "sshf")
 	writeExecutable(t, localShell, `#!/bin/sh
+index=1
+while [ "$index" -le 40 ]; do
+  printf 'scrollback-line-%02d\n' "$index"
+  index=$((index + 1))
+done
 printf 'local-shell-ready\n'
 IFS= read -r input
 printf 'local:%s\n' "$input"
@@ -782,6 +1008,7 @@ working_directory = %q
 [terminal]
 default_shell = %q
 shell_args = ["global arg with spaces"]
+scrollback_lines = 12
 [app]
 refresh_interval = "1h"
 probe_enabled = false
@@ -819,6 +1046,12 @@ enabled = false
 	h.waitForScreen("local-shell-ready", 5*time.Second)
 	h.waitForScreen("2:Local shell", 5*time.Second)
 	h.screenshot("local-terminal-tab")
+	// Bubble Tea enables SGR mouse reporting. This is one real wheel-up event;
+	// it must browse SSH Fleet's local VT scrollback instead of reaching the
+	// child shell as an Up key and changing command history.
+	h.send("\x1b[<64;20;10M")
+	h.waitForScreen("SCROLL 3/12", 5*time.Second)
+	h.screenshot("local-terminal-tab-scrollback")
 	h.send("local-tab-exit\r")
 	h.waitForScreen("local:local-tab-exit", 5*time.Second)
 	h.waitForScreen("› 1:Fleet", 5*time.Second)
@@ -831,7 +1064,7 @@ enabled = false
 	h.send("hello-local\r")
 	h.waitForScreen("local:hello-local", 5*time.Second)
 	h.waitForScreenGone("TERMINAL · Local workstation · Ctrl+]", 5*time.Second)
-	h.send("q")
+	h.quit()
 	if err := h.wait(5 * time.Second); err != nil {
 		t.Fatalf("sshf did not exit cleanly: %v\n%s", err, h.tail(4000))
 	}
@@ -885,6 +1118,13 @@ func newPTYHarness(t *testing.T, command *exec.Cmd, terminal *os.File, cols, row
 
 func (h *ptyHarness) screenText() string {
 	return ansi.Strip(h.screen.Render())
+}
+
+func (h *ptyHarness) quit() {
+	h.t.Helper()
+	h.send("q")
+	h.waitForScreen("QUIT SSH FLEET?", 3*time.Second)
+	h.send("q")
 }
 
 func (h *ptyHarness) waitForScreen(needle string, timeout time.Duration) {

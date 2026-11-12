@@ -20,6 +20,7 @@ test обновляются в том же commit.
 | Remote executable `ssh_config` | намеренно запрещено | negative source tests |
 | Per-host private overlays | реализовано, base untouched | model + PTY edit/reload |
 | Cross-source groups + private `groups.d` keyboard CRUD | реализовано | storage/model + real PTY screenshots |
+| Built-in read-only Views: Offline/Errors/high CPU/low MEM/Stale | реализовано | model predicates + real PTY traversal/screenshots |
 
 ## Platform foundation и local terminal
 
@@ -59,14 +60,18 @@ script через `sh -s`. Password AskPass включается только д
 ## Навигация и rendering
 
 - Responsive flat `lf`-style Sources/Hosts/Preview layout.
-- `All available` первым; ниже source rows и отдельная секция `GROUPS`.
+- `All available` первым; ниже отдельные секции `SOURCES`, `GROUPS`, `VIEWS`.
+- Views вычисляются из последнего probe/source state: `Offline`, `Errors`,
+  `CPU ≥ 80%`, `MEM ≤ 20%`, `Stale`; они не меняют source/group membership.
 - `n` create, host `m` или Enter → `Manage group membership`, group `R` rename,
   `D` delete, `e` edit;
   fragments atomic mode-0600, source configs остаются read-only.
 - HOSTS primary by invariant; side-pane shares и nested host name column из TOML.
 - CPU%/MEM% используют dtop-style `█/░` bars; neutral selected-row highlight не
   скрывает заполненную и свободную части шкалы.
-- Keyboard navigation: Vim keys, arrows, Home/End, panes, filter.
+- Keyboard navigation: Vim keys, arrows, Home/End and panes; `/` performs a
+  case-insensitive global multi-term host search across Sources/Groups and
+  restores the previous context on clear.
 - Context-sensitive dtop-style Enter menu.
 - External text bounded, sanitized for invalid UTF-8, controls, ANSI and length.
 - Resize-aware PTY; Preview expands temporarily and restores configured layout.
@@ -76,7 +81,7 @@ script через `sh -s`. Password AskPass включается только д
 
 | Действие | Поведение |
 |---|---|
-| Terminal tabs | numbered permanent Fleet + independent SSH/local/container PTY tabs; primary direct `Alt+1…9` plus optional `Ctrl+1…9`, cyclic `Ctrl+N/P`, `Ctrl+G`, immediate local `Ctrl+D` close, auto-return to Fleet after active session exit, terminal-local `q`, confirmed `Ctrl+]` close; bracketed paste is forwarded as one nested-PTY event; installed-launcher PTY regression rejects the legacy foreground banner |
+| Terminal tabs | numbered permanent Fleet + independent SSH/local/container PTY tabs; conflict-free `Ctrl+G` then plain `1…9` selection with visible/cancellable prefix mode, cyclic `Ctrl+N/P`, terminal-dependent compatibility `Alt+1…9`/`Ctrl+1…9`, immediate local `Ctrl+D` close, auto-return to Fleet after active session exit, terminal-local `q`, confirmed `Ctrl+]` close; bracketed paste is forwarded as one nested-PTY event; wheel browses configurable bounded per-tab VT scrollback instead of remote shell history; real PTY regression traverses the prefix and rejects the legacy foreground banner |
 | Preview terminal | embedded real PTY + VT, resize, `Ctrl+]` return |
 | Last session | max 12 printable lines, 128 KiB in-memory capture, never persisted |
 | Git check | `ssh -T`, no Linux probe/shell assumption |
@@ -129,7 +134,7 @@ mounts, networks и ports. Runtime sources имеют отдельные сос�
 
 ## Версии и доставка
 
-- `--version`, human `version`, machine-readable `version --json`.
+- Equivalent `-v`/`--version`, human `version`, machine-readable `version --json`.
 - Dev provenance: branch + 12-char SHA + optional `+dirty` + source date.
 - Stable version: strict `vMAJOR.MINOR.PATCH`, main only, clean tree.
 - Release workflow separates verify and publish jobs; exact SHA regression,
@@ -159,7 +164,7 @@ Shell fixtures запускаются в отдельной process session бе
    parsing, sanitization, scheduler, host-key atomicity, buildinfo.
 2. **Bubble Tea model/render:** реальные KeyMsg проходят `Update`; semantic View
    проверяется после ANSI stripping.
-3. **PTY E2E:** собранный binary получает реальные клавиши; проверяются filters,
+3. **PTY E2E:** собранный binary получает реальные клавиши; проверяются Views, global search,
    editor suspend/restore, every Enter menu row, две параллельные terminal tabs,
    switch/live-close confirmation, embedded VT, exit и screenshots.
 4. **Crypto/network integration:** disposable age/SSHSIG keys и local TLS bearer

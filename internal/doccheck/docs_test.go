@@ -96,7 +96,7 @@ func TestConfigurationReferenceTracksPublicFlagsAndFields(t *testing.T) {
 		"--config", "--editor", "--inventory", "--list", "--max-concurrent",
 		"--no-default-ssh-config", "--no-probe", "--no-user-ssh-config",
 		"--overrides-dir", "--probe", "--refresh-interval", "--sources-dir", "--groups-dir",
-		"--shell", "--shell-arg", "--ssh-config", "--user-ssh-config", "--version",
+		"--shell", "--shell-arg", "--ssh-config", "--user-ssh-config", "`-v`", "--version",
 	}
 	fields := []string{
 		"refresh_interval", "connect_timeout", "max_concurrent", "ssh_binary",
@@ -119,7 +119,8 @@ func TestUserGuideTracksInteractiveContract(t *testing.T) {
 	root := repositoryRoot(t)
 	body := readFile(t, filepath.Join(root, "docs", "user-guide.md"))
 	required := []string{
-		"SOURCES", "HOSTS", "PREVIEW", "All available", "Enter", "Shift+K",
+		"SOURCES", "GROUPS", "VIEWS", "HOSTS", "PREVIEW", "All available", "Enter", "Shift+K",
+		"Offline", "Errors", "CPU ≥ 80%", "MEM ≤ 20%", "Stale",
 		"Open terminal tab", "Open terminal in Preview", "Open SSH Fleet workspace",
 		"nvim → vim → nano", "50 строк", "Git endpoint", "Host overlay",
 		"Groups", "groups.d", "Group membership", "Manage group membership", "source:alias",
@@ -267,6 +268,15 @@ func TestRegressionScriptAndDocsRequireBoundedGoStages(t *testing.T) {
 			t.Errorf("regression script does not enforce %q", command)
 		}
 	}
+	installFull := strings.Index(script, `run_step install-full "$repo_root/tools/test-install-full.sh"`)
+	toolchainCheck := strings.Index(script, `run_step toolchain "$repo_root/tools/check.sh"`)
+	if installFull < 0 || toolchainCheck < 0 || installFull > toolchainCheck {
+		t.Error("regression must prepare a fresh clone with install-full before checking the optional toolchain")
+	}
+	editorPTY := strings.Index(script, "run_step editor-pty env SSHF_REQUIRE_NVIM_E2E=1")
+	if editorPTY < 0 || editorPTY < toolchainCheck {
+		t.Error("full regression must require the real Neovim PTY scenario after preparing the toolchain")
+	}
 	for _, name := range []string{"README.md", filepath.Join("docs", "features.md")} {
 		body := strings.ToLower(readFile(t, filepath.Join(root, name)))
 		if !strings.Contains(body, "watchdog") || !strings.Contains(body, "stack trace") {
@@ -277,5 +287,42 @@ func TestRegressionScriptAndDocsRequireBoundedGoStages(t *testing.T) {
 				t.Errorf("%s does not document regression launch from %s", name, shell)
 			}
 		}
+	}
+}
+
+func TestLauncherSourcesAreSeparatedFromGeneratedBinLayout(t *testing.T) {
+	root := repositoryRoot(t)
+	for _, name := range []string{
+		"sshfleet", "sshf", "lf", "dtop", "nvim", "bat", "batcat",
+		"sshfleet-editor", "sshfleet-open", "sshfleet-preview",
+	} {
+		body := readFile(t, filepath.Join(root, "tools", "launchers", name))
+		if !strings.HasPrefix(body, "#!/bin/sh\n") {
+			t.Errorf("tools/launchers/%s is not explicit POSIX shell source", name)
+		}
+	}
+	if entries, err := os.ReadDir(filepath.Join(root, "tools", "bin")); err == nil && len(entries) != 0 {
+		t.Fatalf("tools/bin contains %d generated files in the source checkout", len(entries))
+	} else if err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	ignore := readFile(t, filepath.Join(root, ".gitignore"))
+	if !strings.Contains(ignore, "/tools/bin/") {
+		t.Error(".gitignore does not reserve tools/bin for generated/install output")
+	}
+	toolDocs := readFile(t, filepath.Join(root, "tools", "README.md"))
+	for _, term := range []string{"`launchers/` contains tracked POSIX shell source", "`bin/` is reserved"} {
+		if !strings.Contains(toolDocs, term) {
+			t.Errorf("tools README does not explain launcher layout: %q", term)
+		}
+	}
+	release := readFile(t, filepath.Join(root, "tools", "build-release.sh"))
+	if !strings.Contains(release, "$repo_root/tools/launchers/sshfleet") ||
+		!strings.Contains(release, "$stage/tools/bin/sshfleet") {
+		t.Error("release build does not map launcher source into the installed bin layout")
+	}
+	verify := readFile(t, filepath.Join(root, "tools", "verify.sh"))
+	if strings.Contains(verify, "$HOME/.local/bin/sshfleet") {
+		t.Error("toolchain verification must not depend on a user's installed launcher")
 	}
 }

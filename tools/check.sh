@@ -47,12 +47,12 @@ for name in lf dtop nvim bat; do
     fi
 done
 
-test -x "$repo_root/tools/bin/batcat"
-test -x "$repo_root/tools/bin/sshfleet-preview"
-test -x "$repo_root/tools/bin/sshfleet-open"
-test -x "$repo_root/tools/bin/sshfleet-editor"
-test -x "$repo_root/tools/bin/sshfleet"
-test -x "$repo_root/tools/bin/sshf"
+test -x "$repo_root/tools/launchers/batcat"
+test -x "$repo_root/tools/launchers/sshfleet-preview"
+test -x "$repo_root/tools/launchers/sshfleet-open"
+test -x "$repo_root/tools/launchers/sshfleet-editor"
+test -x "$repo_root/tools/launchers/sshfleet"
+test -x "$repo_root/tools/launchers/sshf"
 
 if [ "$built" = true ]; then
     test -x "$repo_root/.toolchain/bin/lf"

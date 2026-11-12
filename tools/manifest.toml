@@ -5,25 +5,25 @@ version = "r42"
 revision = "5b6c393d547970a264bd4f0a78fd6513227f8e10"
 url = "https://github.com/gokcehan/lf.git"
 source = "tools/src/lf"
-launcher = "tools/bin/lf"
+launcher = "tools/launchers/lf"
 
 [tools.dtop]
 version = "v0.9.0"
 revision = "fb9bc2e37fd77f199d9f950c333110867c09d340"
 url = "https://github.com/amir20/dtop.git"
 source = "tools/src/dtop"
-launcher = "tools/bin/dtop"
+launcher = "tools/launchers/dtop"
 
 [tools.nvim]
 version = "v0.12.5"
 revision = "5885a30e1e1225349079e7a1c4a3848aa8e43e42"
 url = "https://github.com/neovim/neovim.git"
 source = "tools/src/nvim"
-launcher = "tools/bin/nvim"
+launcher = "tools/launchers/nvim"
 
 [tools.bat]
 version = "v0.26.1"
 revision = "979ba22628bc9d8171f2cffca2bd5c90c9fc0a9e"
 url = "https://github.com/sharkdp/bat.git"
 source = "tools/src/bat"
-launcher = "tools/bin/bat"
+launcher = "tools/launchers/bat"

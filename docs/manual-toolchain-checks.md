@@ -25,7 +25,7 @@ type -p sshfleet lf dtop nvim bat batcat
 
 - сборка заканчивается `toolchain verify: ok`;
 - `sshfleet` разрешается через `~/.local/bin/sshfleet`, а companion-команды после
-  developer activation — в `$PWD/tools/bin/`;
+  developer activation — в `$PWD/tools/launchers/`;
 - `git status --short` остаётся пустым;
 - `.toolchain/` существует, но `git check-ignore .toolchain/bin/lf` завершается
   успешно.

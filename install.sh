@@ -97,7 +97,12 @@ if [ "$prebuilt" = false ]; then
     make -C "$source_root" build
 fi
 
-for file in "$source_root/bin/sshfleet" "$source_root/tools/bin/sshfleet" "$source_root/tools/bin/sshf"; do
+launcher_dir=$source_root/tools/launchers
+if [ ! -d "$launcher_dir" ]; then
+    launcher_dir=$source_root/tools/bin
+fi
+
+for file in "$source_root/bin/sshfleet" "$launcher_dir/sshfleet" "$launcher_dir/sshf"; do
     [ -x "$file" ] || { printf 'sshfleet installer: missing executable: %s\n' "$file" >&2; exit 1; }
 done
 
@@ -112,12 +117,12 @@ trap cleanup EXIT HUP INT TERM
 chmod 0755 "$stage"
 install -d -m 0755 "$stage/bin" "$stage/tools/bin"
 install -m 0755 "$source_root/bin/sshfleet" "$stage/bin/sshfleet"
-install -m 0755 "$source_root/tools/bin/sshfleet" "$stage/tools/bin/sshfleet"
-install -m 0755 "$source_root/tools/bin/sshf" "$stage/tools/bin/sshf"
+install -m 0755 "$launcher_dir/sshfleet" "$stage/tools/bin/sshfleet"
+install -m 0755 "$launcher_dir/sshf" "$stage/tools/bin/sshf"
 
 if [ "$mode" = full ]; then
     for launcher in lf dtop nvim bat batcat sshfleet-preview; do
-        install -m 0755 "$source_root/tools/bin/$launcher" "$stage/tools/bin/$launcher"
+        install -m 0755 "$launcher_dir/$launcher" "$stage/tools/bin/$launcher"
     done
     cp -a "$source_root/tools/config" "$stage/tools/config"
     install -d -m 0755 "$stage/.toolchain"

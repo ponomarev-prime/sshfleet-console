@@ -49,7 +49,10 @@ require_json "$version_json" commit '"'"$commit"'"'
 require_json "$version_json" source_date '"'"$source_date"'"'
 printf '%s\n' "$version_json" | grep -E '"source_state": "(clean|dirty)"' >/dev/null || fail "current source state missing"
 printf '%s\n' "$version_json" | grep -E '"dirty": (true|false)' >/dev/null || fail "current dirty boolean missing"
-"$repo_root/bin/sshfleet" --version | grep -E '^sshfleet [A-Za-z0-9._+-]+ \(' >/dev/null || fail "one-line version is malformed"
+long_version=$("$repo_root/bin/sshfleet" --version)
+short_version=$("$repo_root/bin/sshfleet" -v)
+printf '%s\n' "$long_version" | grep -E '^sshfleet [A-Za-z0-9._+-]+ \(' >/dev/null || fail "one-line version is malformed"
+[ "$short_version" = "$long_version" ] || fail "-v output differs from --version"
 "$repo_root/bin/sshfleet" version | grep -F "commit:      $commit" >/dev/null || fail "human version omits full commit"
 expect_failure version-positional "$repo_root/bin/sshfleet" version unexpected
 expect_failure version-unknown-flag "$repo_root/bin/sshfleet" version --unknown
@@ -183,6 +186,7 @@ cat > "$test_root/expected-files" <<EOF
 /docs/assets/screenshots/groups.png
 /docs/assets/screenshots/host-actions.png
 /docs/assets/screenshots/terminal-tabs.png
+/docs/assets/screenshots/views.png
 /docs/configuration.md
 /docs/features.md
 /docs/glossary.md

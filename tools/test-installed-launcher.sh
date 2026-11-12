@@ -8,7 +8,7 @@ test_root=$(mktemp -d "$repo_root/.tmp/installed-launcher.XXXXXX")
 trap 'rm -rf -- "$test_root"' EXIT HUP INT TERM
 
 mkdir -p "$test_root/bin" "$test_root/home" "$test_root/screenshots"
-ln -s "$repo_root/tools/bin/sshfleet" "$test_root/bin/sshfleet"
+ln -s "$repo_root/tools/launchers/sshfleet" "$test_root/bin/sshfleet"
 
 expected=$("$repo_root/bin/sshfleet" --version)
 actual=$(HOME="$test_root/home" PATH="$test_root/bin:/usr/bin:/bin" sshfleet --version)
