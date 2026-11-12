@@ -19,6 +19,7 @@ import (
 	"github.com/ponomarev-prime/sshfleet-console/internal/localtarget"
 	"github.com/ponomarev-prime/sshfleet-console/internal/openssh"
 	"github.com/ponomarev-prime/sshfleet-console/internal/probe"
+	"github.com/ponomarev-prime/sshfleet-console/internal/runlog"
 	"github.com/ponomarev-prime/sshfleet-console/internal/session"
 	"github.com/ponomarev-prime/sshfleet-console/internal/toolcheck"
 	"github.com/ponomarev-prime/sshfleet-console/internal/workspace"
@@ -55,6 +56,8 @@ type Model struct {
 	message                string
 	results                map[string]probe.Result
 	effective              map[string]openssh.Effective
+	resolveRunning         map[string]uint64
+	resolveEpoch           uint64
 	polling                map[string]bool
 	sessionTail            map[string][]string
 	hostKeyPlan            *knownhosts.Plan
@@ -62,7 +65,16 @@ type Model struct {
 	hostKeyBusy            bool
 	hostKeyBackup          map[string]string
 	hostKeyPrompt          map[string]bool
-	queue                  []int
+	queue                  []string
+	probeRunning           map[string]bool
+	log                    *runlog.Logger
+	firstView              *sync.Once
+	startupLoading         bool
+	startupSortPending     bool
+	startupEvents          <-chan StartupUpdate
+	startupContext         context.Context
+	startupCancel          context.CancelFunc
+	startupTask            tea.Cmd
 	active                 int
 	lastRefresh            time.Time
 	overridesDir           string
@@ -115,13 +127,18 @@ type dynamicSourcesMsg struct {
 	sources []inventory.SourceSummary
 }
 type probeMsg struct {
-	id     string
-	result probe.Result
+	id         string
+	result     probe.Result
+	durationMS int64
+	kind       inventory.Transport
 }
 type resolveMsg struct {
 	id        string
 	effective openssh.Effective
+	epoch     uint64
 }
+
+type startResolveMsg struct{}
 type sessionFinishedMsg struct {
 	index int
 	err   error
@@ -278,7 +295,10 @@ func New(hosts []inventory.Host, sources []inventory.SourceSummary, client opens
 		focus:                   focusHosts,
 		results:                 make(map[string]probe.Result),
 		effective:               make(map[string]openssh.Effective),
+		resolveRunning:          make(map[string]uint64),
 		polling:                 make(map[string]bool),
+		probeRunning:            make(map[string]bool),
+		firstView:               &sync.Once{},
 		sessionTail:             make(map[string][]string),
 		hostKeyIndex:            -1,
 		hostKeyBackup:           make(map[string]string),
@@ -294,17 +314,21 @@ func New(hosts []inventory.Host, sources []inventory.SourceSummary, client opens
 
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.tickCmd(), func() tea.Msg { return startPollMsg{} }}
+	if m.startupTask != nil {
+		cmds = append(cmds, m.startupTask, m.awaitStartup())
+	}
 	if m.dynamicDiscover != nil {
 		cmds = append(cmds, m.dynamicTickCmd())
 	}
-	if len(m.hosts) > 0 {
-		cmds = append(cmds, m.resolveCmd(0))
-	}
+	cmds = append(cmds, func() tea.Msg { return startResolveMsg{} })
 	return tea.Batch(cmds...)
 }
 
 func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := message.(type) {
+	case startupUpdateMsg:
+		cmd := m.applyStartup(msg.value)
+		return m, cmd
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		if m.embedded != nil {
@@ -390,7 +414,7 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 	case dynamicTickMsg:
 		cmds := []tea.Cmd{m.dynamicTickCmd()}
-		if m.dynamicDiscover != nil && !m.dynamicBusy && !m.editing && m.embedded == nil && !m.embeddedStarting && !m.targetStarting && m.active == 0 && len(m.queue) == 0 {
+		if m.dynamicDiscover != nil && !m.startupLoading && !m.dynamicBusy && !m.editing && m.embedded == nil && !m.embeddedStarting && !m.targetStarting {
 			m.dynamicBusy = true
 			discover := m.dynamicDiscover
 			cmds = append(cmds, func() tea.Msg {
@@ -402,7 +426,7 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 	case dynamicSourcesMsg:
 		m.dynamicBusy = false
-		if m.editing || m.embedded != nil || m.embeddedStarting || m.targetStarting || m.active > 0 || len(m.queue) > 0 {
+		if m.editing || m.actionMenu || m.hostKeyBusy || m.embedded != nil || m.embeddedStarting || m.targetStarting {
 			return m, nil
 		}
 		selectedID := ""
@@ -496,12 +520,21 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	case probeMsg:
 		m.active--
 		delete(m.polling, msg.id)
-		if previous, ok := m.results[msg.id]; ok && msg.result.Status == probe.StatusOnline {
+		delete(m.probeRunning, msg.id)
+		if previous, ok := m.results[msg.id]; ok && msg.result.Status == probe.StatusOnline && !msg.result.CPUValid {
 			msg.result.ApplyPrevious(previous)
 		}
-		m.results[msg.id] = msg.result
+		memoryReady := msg.result.MemoryTotal > 0
+		m.log.Record(runlog.Event{Event: "probe.end", Target: m.log.Ref(msg.id), Kind: string(msg.kind), Status: string(msg.result.Status), DurationMS: msg.durationMS, CPUReady: &msg.result.CPUValid, MemoryReady: &memoryReady})
+		for _, host := range m.hosts {
+			if host.ID == msg.id {
+				m.results[msg.id] = msg.result
+				break
+			}
+		}
 		if m.active == 0 && len(m.queue) == 0 {
 			m.lastRefresh = time.Now()
+			m.sortStartupIfIdle()
 		}
 		if m.active == 0 && m.refreshAfter && !m.editing {
 			m.refreshAfter = false
@@ -509,9 +542,24 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.fillPollSlots()
 
+	case startResolveMsg:
+		cmd := m.fillResolveSlots()
+		return m, cmd
+
 	case resolveMsg:
-		m.effective[msg.id] = msg.effective
-		return m, nil
+		if epoch, ok := m.resolveRunning[msg.id]; ok && epoch == msg.epoch {
+			delete(m.resolveRunning, msg.id)
+		}
+		if msg.epoch == m.resolveEpoch {
+			for _, host := range m.hosts {
+				if host.ID == msg.id && host.TargetTransport() == inventory.TransportSSH {
+					m.effective[msg.id] = msg.effective
+					break
+				}
+			}
+		}
+		cmd := m.fillResolveSlots()
+		return m, cmd
 
 	case hostKeyPlanMsg:
 		m.hostKeyBusy = false
@@ -571,6 +619,7 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.hosts = msg.hosts
 		m.sources = msg.sources
+		m.invalidateResolutions()
 		m.source = 0
 		m.selected = 0
 		for position, index := range m.visibleIndices() {
@@ -611,6 +660,7 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.hosts, m.sources = msg.hosts, msg.sources
+		m.invalidateResolutions()
 		m.source, m.selected = 0, 0
 		for position, index := range m.visibleIndices() {
 			if m.hosts[index].ID == msg.id {
@@ -809,6 +859,10 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	visible := m.visibleIndices()
+	if m.startupLoading && (msg.String() == "e" || msg.String() == "c" || msg.String() == "n" || msg.String() == "m" || msg.String() == "x" || msg.String() == "R" || msg.String() == "D") {
+		m.message = "Sources are still loading; editing is available after startup"
+		return m, nil
+	}
 	switch msg.String() {
 	case "q", "ctrl+c":
 		return m.requestQuit()
@@ -906,10 +960,12 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.resolveSelectedCmd()
 	case "r":
+		m.invalidateResolutions()
 		if m.active == 0 {
-			return m, func() tea.Msg { return startPollMsg{} }
+			return m, tea.Batch(m.resolveSelectedCmd(), func() tea.Msg { return startPollMsg{} })
 		}
 		m.message = "Обновление уже выполняется"
+		return m, m.resolveSelectedCmd()
 	case "e":
 		if m.focus == focusSources && m.selectedGroup() != "" {
 			return m.editSelectedGroup()
@@ -986,11 +1042,22 @@ func (m *Model) beginPoll() {
 		return
 	}
 	m.queue = m.queue[:0]
-	for i, host := range m.hosts {
+	indices := m.visibleIndices()
+	if pos := m.selected; pos >= 0 && pos < len(indices) {
+		indices = append([]int{indices[pos]}, indices...)
+	}
+	for i := range m.hosts {
+		indices = append(indices, i)
+	}
+	for _, i := range indices {
+		host := m.hosts[i]
 		if !host.Probe {
 			continue
 		}
-		m.queue = append(m.queue, i)
+		if m.polling[host.ID] {
+			continue
+		}
+		m.queue = append(m.queue, host.ID)
 		m.polling[host.ID] = true
 	}
 }
@@ -998,57 +1065,78 @@ func (m *Model) beginPoll() {
 func (m *Model) fillPollSlots() tea.Cmd {
 	var cmds []tea.Cmd
 	for m.active < m.maxConcurrent && len(m.queue) > 0 {
-		index := m.queue[0]
+		id := m.queue[0]
 		m.queue = m.queue[1:]
+		index := -1
+		for i := range m.hosts {
+			if m.hosts[i].ID == id {
+				index = i
+				break
+			}
+		}
+		if index < 0 {
+			delete(m.polling, id)
+			continue
+		}
 		m.active++
+		m.probeRunning[id] = true
 		cmds = append(cmds, m.probeCmd(index))
 	}
+	m.log.Record(runlog.Event{Event: "probe.queue", Active: m.active, Queued: len(m.queue), Count: len(m.results), Total: len(m.hosts)})
 	return tea.Batch(cmds...)
 }
 
 func (m Model) probeCmd(index int) tea.Cmd {
 	host := m.hosts[index]
 	client := m.client
+	previous := m.results[host.ID]
 	return func() tea.Msg {
+		started := time.Now()
+		m.log.Record(runlog.Event{Event: "probe.start", Target: m.log.Ref(host.ID), Kind: string(host.TargetTransport())})
 		timeout := client.ConnectTimeout + 4*time.Second
 		if timeout <= 4*time.Second {
 			timeout = 10 * time.Second
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		defer cancel()
-		var result probe.Result
-		switch host.TargetTransport() {
-		case inventory.TransportLocal:
-			result = localtarget.Probe(ctx, host)
-		case inventory.TransportContainer:
-			result = containers.Probe(host)
-		default:
-			result = client.Probe(ctx, host)
+		collect := func() probe.Result {
+			ctx, cancel := context.WithTimeout(m.operationContext(), timeout)
+			defer cancel()
+			switch host.TargetTransport() {
+			case inventory.TransportLocal:
+				return localtarget.Probe(ctx, host)
+			case inventory.TransportContainer:
+				return containers.Probe(host)
+			default:
+				return client.Probe(ctx, host)
+			}
 		}
-		return probeMsg{id: host.ID, result: result}
+		result := probeWithCPUSample(m.operationContext(), previous, time.Second, collect)
+		return probeMsg{id: host.ID, result: result, durationMS: time.Since(started).Milliseconds(), kind: host.TargetTransport()}
 	}
 }
 
 func (m Model) resolveCmd(index int) tea.Cmd {
 	host := m.hosts[index]
 	client := m.client
+	epoch := m.resolveEpoch
 	return func() tea.Msg {
 		if host.TargetTransport() != inventory.TransportSSH {
-			return resolveMsg{id: host.ID}
+			return resolveMsg{id: host.ID, epoch: epoch}
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+		ctx, cancel := context.WithTimeout(m.operationContext(), 4*time.Second)
 		defer cancel()
-		return resolveMsg{id: host.ID, effective: client.Resolve(ctx, host)}
+		started := time.Now()
+		effective := client.Resolve(ctx, host)
+		status := "ready"
+		if effective.Error != "" {
+			status = "failed"
+		}
+		m.log.Record(runlog.Event{Event: "resolve.end", Target: m.log.Ref(host.ID), Status: status, DurationMS: time.Since(started).Milliseconds()})
+		return resolveMsg{id: host.ID, effective: effective, epoch: epoch}
 	}
 }
 
 func (m Model) resolveSelectedCmd() tea.Cmd {
-	visible := m.visibleIndices()
-	if len(visible) == 0 {
-		return nil
-	}
-	selected := min(m.selected, len(visible)-1)
-	return m.resolveCmd(visible[selected])
+	return func() tea.Msg { return startResolveMsg{} }
 }
 
 func (m Model) inspectHostKeyCmd(index int, result probe.Result) tea.Cmd {

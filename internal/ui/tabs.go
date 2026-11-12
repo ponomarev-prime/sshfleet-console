@@ -504,6 +504,7 @@ func (m Model) requestQuit() (tea.Model, tea.Cmd) {
 		}
 	}
 	if !live {
+		m.cancelBackground()
 		return m, tea.Quit
 	}
 	if !m.quitTabsConfirm {
@@ -512,6 +513,7 @@ func (m Model) requestQuit() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.quitAfterTabsClose = true
+	m.cancelBackground()
 	m.message = "Closing terminal tabs…"
 	cmds := make([]tea.Cmd, 0, len(m.tabs))
 	kept := m.tabs[:0]

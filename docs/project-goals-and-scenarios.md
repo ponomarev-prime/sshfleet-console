@@ -144,7 +144,8 @@ SSH Fleet Console — терминальный менеджер SSH-ресурс
 В таблице hosts показываются:
 
 - лампочка/состояние доступности;
-- имя или алиас;
+- имя или алиас с connection context в квадратных скобках: SSH user/target/port
+  и маршрут ProxyJump либо container runtime/context/короткий immutable ID;
 - число CPU cores;
 - общий объём RAM;
 - общий объём swap или его отсутствие;
@@ -802,6 +803,53 @@ expiry, rollback, redirect и size limits; отсутствие plaintext/creden
 cache, logs и argv; backup-first repair на disposable Docker sshd.
 
 ## Актуальный план развития
+
+Дополнение 12.11.2026 по результату использования лабораторной сборки: обычный
+запуск включает probes согласно конфигурации; --no-probe является только явным
+отключением. В таком режиме UI пишет probe disabled, а не waiting for probe.
+Первый Fleet-экран не ждёт inventory, container runtimes и optional tool health.
+Источники загружаются последовательно в фоне с состояниями loading/ready/error;
+готовые hosts, подписи и probe results появляются сразу. Очередь probes хранит
+stable ID и сначала обслуживает выбранный/видимый контекст. Dynamic discovery
+не голодает из-за длинного SSH sweep. Ошибка одного target не отменяет остальные.
+
+Каждый обычный запуск сохраняет private JSONL в XDG state directory: version,
+commit, first-view/config/source/runtime/tool timings, probe queue/status и
+готовность CPU/RAM. Логи не содержат aliases, usernames, addresses, credentials,
+raw SSH output, environment или команд. Target связывается с Preview через
+run-scoped log ref. Продуктовые defaults: 4 MiB на segment, один предыдущий
+segment, 10 завершённых запусков. Active/прерванные журналы не удаляются этим
+retention. --no-log отключает журнал; logs показывает последние записи.
+
+CPU% вычисляется по двум измерениям; до второго sample явно показывается CPU
+sampling. При отсутствии пригодного предыдущего счётчика worker делает не более
+одного повторного запроса через секунду, сохраняя свой слот max_concurrent: доступная
+цель получает первую delta до окончания всего fleet sweep. Навигация/действия не
+ждут probes; отмена приложения отменяет интервал и query. Неисправные счётчики не
+вызывают бесконечного приоритетного опроса, ошибка второго query не скрывается.
+Последующие refresh используют прежнюю общую очередь. Preview показывает load
+average 1/5/15m отдельно от CPU% и возраст sample. Неизвестные метрики не равны нулю.
+Доступность container runtime и inspect не считается наличием CPU/RAM
+контейнера: этот транспорт пока сообщает состояние, его resource stats не
+реализованы в этом изменении. Метрики SSH/local и startup latency проверяются
+отдельно от runtime inspection.
+
+Актуализация 12.11.2026: ближайшая функция - подписи целей в HOSTS.
+Контекст всегда показывается отдельной строкой под именем перед top process,
+включая короткие алиасы и широкий экран. Метрики сохраняются.
+OpenSSH resolution выполняется независимо от remote probes, с максимум четырьмя
+локальными ssh -G одновременно (не выше max_concurrent), кешем до reload или r
+и защитой от поздних результатов предыдущей конфигурации. Loading/ошибка
+видимы, DNS остаётся DNS, IPv6/port однозначны, ProxyCommand обозначается только
+как custom proxy без хранения raw command в UI. Direct localhost отличается от
+local sshd; контейнеры не получают выдуманные SSH user/IP. Display label не
+меняет identity, фактический transport или argv подключения.
+
+Следом развивать существующий buildinfo/JSON contract: schema version,
+одинаковые официальные build paths и честное unknown-state. Версионирование
+уже есть. Полный native platform support и дальнейшие epics остаются ниже;
+Web/Hub приостановлены. Кастомная сборка выпускается отдельно от установленного
+sshfleet и не переключает пользовательский launcher.
 
 Порядок учитывает дополнения из Outline и уже реализованный localhost/container
 MVP. Каждый этап завершается отдельным reviewable commit, обновлением
