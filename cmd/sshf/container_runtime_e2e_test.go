@@ -124,7 +124,7 @@ shell_priority = ["/bin/sh"]
 	h.waitForScreen(name, 8*time.Second)
 	h.screenshot(runtimeName + "-runtime-logs-return")
 
-	h.send("q")
+	h.quit()
 	if err := h.wait(8 * time.Second); err != nil {
 		t.Fatalf("sshf did not exit cleanly after %s PTY test: %v\n%s", runtimeName, err, h.tail(5000))
 	}

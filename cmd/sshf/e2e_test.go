@@ -211,7 +211,7 @@ source = "fixture"
 	h.waitForAfter(mark, "EDITOR-ARROW-OK", 5*time.Second)
 	h.waitForAfter(mark, "Config saved; restart SSH Fleet Console to apply", 5*time.Second)
 
-	h.send("q")
+	h.quit()
 	if err := h.wait(5 * time.Second); err != nil {
 		t.Fatalf("sshf did not exit cleanly: %v\n%s", err, h.tail(4000))
 	}
@@ -317,7 +317,7 @@ path = %q
 	h.waitForScreenGone("Needle Host", 3*time.Second)
 	h.screenshot("global-search-restored-source")
 
-	h.send("q")
+	h.quit()
 	if err := h.wait(5 * time.Second); err != nil {
 		t.Fatalf("sshfleet did not exit after global search: %v\n%s", err, h.tail(4000))
 	}
@@ -394,7 +394,7 @@ host_column_percent = 30
 	}
 	h.send(":q!\r")
 	h.waitForScreen("Config saved; restart", 5*time.Second)
-	h.send("q")
+	h.quit()
 	if err := h.wait(5 * time.Second); err != nil {
 		t.Fatalf("sshf did not exit after Neovim: %v\n%s", err, h.tail(4000))
 	}
@@ -667,7 +667,7 @@ max_concurrent = 2
 			h.waitForScreenGone("TERMINAL · alpha · Ctrl+]", 5*time.Second)
 			h.waitForScreen("fixture:embedded-ex", 5*time.Second)
 
-			h.send("q")
+			h.quit()
 			if err := h.wait(5 * time.Second); err != nil {
 				t.Fatalf("sshf did not exit cleanly: %v\n%s", err, h.tail(4000))
 			}
@@ -760,7 +760,7 @@ path = %q
 	h.waitForScreen("Stale", 3*time.Second)
 	h.waitForScreen("No hosts in this view", 3*time.Second)
 	h.screenshot("views-stale-empty")
-	h.send("q")
+	h.quit()
 	if err := h.wait(5 * time.Second); err != nil {
 		t.Fatalf("sshfleet did not exit after Views traversal: %v\n%s", err, h.tail(4000))
 	}
@@ -880,7 +880,7 @@ path = %q
 	h.waitForScreen("n create group", 3*time.Second)
 	h.screenshot("groups-deleted")
 
-	h.send("q")
+	h.quit()
 	if err := h.wait(5 * time.Second); err != nil {
 		t.Fatalf("sshf did not exit cleanly: %v\n%s", err, h.tail(4000))
 	}
@@ -971,7 +971,7 @@ shell_priority = ["/bin/sh"]
 	h.waitForScreen("container-log-line", 5*time.Second)
 	h.waitForScreen("› 1:Fleet", 5*time.Second)
 	h.screenshot("container-logs-tab")
-	h.send("q")
+	h.quit()
 	if err := h.wait(5 * time.Second); err != nil {
 		t.Fatalf("sshf did not exit cleanly: %v\n%s", err, h.tail(4000))
 	}
@@ -1060,7 +1060,7 @@ enabled = false
 	h.send("hello-local\r")
 	h.waitForScreen("local:hello-local", 5*time.Second)
 	h.waitForScreenGone("TERMINAL · Local workstation · Ctrl+]", 5*time.Second)
-	h.send("q")
+	h.quit()
 	if err := h.wait(5 * time.Second); err != nil {
 		t.Fatalf("sshf did not exit cleanly: %v\n%s", err, h.tail(4000))
 	}
@@ -1114,6 +1114,13 @@ func newPTYHarness(t *testing.T, command *exec.Cmd, terminal *os.File, cols, row
 
 func (h *ptyHarness) screenText() string {
 	return ansi.Strip(h.screen.Render())
+}
+
+func (h *ptyHarness) quit() {
+	h.t.Helper()
+	h.send("q")
+	h.waitForScreen("QUIT SSH FLEET?", 3*time.Second)
+	h.send("q")
 }
 
 func (h *ptyHarness) waitForScreen(needle string, timeout time.Duration) {

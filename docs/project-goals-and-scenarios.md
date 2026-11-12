@@ -112,7 +112,9 @@ SSH Fleet Console — терминальный менеджер SSH-ресурс
 30. Показывать read-only container inspection независимо от наличия shell:
     context/endpoint, immutable ID, image, health, command, mounts, networks,
     ports, restart policy и platform; отсутствие доступа к runtime не должно
-    выглядеть как пустой список.
+    выглядеть как пустой список. Health поддерживает Docker/Podman варианты полей;
+    отсутствующая проверка (not-configured) отличается от проверки без результата
+    (unknown), полученные starting/healthy/unhealthy сохраняются.
 31. Публиковать исходники и screenshots только из privacy-reviewed clean
     snapshot: private development history/archive tags и обычные regression
     artifacts не пересекают public boundary; LICENSE/NOTICE, dependency notices,
@@ -120,6 +122,11 @@ SSH Fleet Console — терминальный менеджер SSH-ресурс
 
 ## Базовая модель интерфейса
 
+- Выход из Fleet всегда требует подтверждения: первое q/Ctrl+C открывает диалог,
+  повторное q/Ctrl+C либо Enter/y подтверждает, Esc/n отменяет. Иная обычная клавиша
+  снимает запрос и продолжает навигацию. Первый запрос не отменяет фоновую работу.
+  Диалог предупреждает о завершении живых terminal tabs; выход происходит после
+  их штатного cleanup. В поиске/меню/живом терминале q сохраняет свой контекст.
 - `SOURCES` — узкий левый столбец. Первая строка всегда `All available`, ниже —
   каждый доступный источник и число узлов.
 - `HOSTS` — самый широкий и главный столбец. В заголовке находятся `CPU`, `MEM`,

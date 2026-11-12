@@ -7,8 +7,11 @@ mkdir -p "$repo_root/.tmp"
 test_root=$(mktemp -d "$repo_root/.tmp/full-install.XXXXXX")
 trap 'rm -rf -- "$test_root"' EXIT HUP INT TERM
 
-"$repo_root/install.sh" --full \
-    --prefix "$test_root/app" --bin-dir "$test_root/bin" >"$test_root/install.log"
+if ! "$repo_root/install.sh" --full \
+    --prefix "$test_root/app" --bin-dir "$test_root/bin" >"$test_root/install.log" 2>&1; then
+    cat "$test_root/install.log" >&2
+    exit 1
+fi
 
 for tool in lf dtop nvim bat; do
     test -x "$test_root/app/current/.toolchain/bin/$tool"

@@ -100,7 +100,7 @@ path = %q
 	h.waitForScreen("shell origin", 5*time.Second)
 	h.waitForScreen("[local]", 5*time.Second)
 	h.screenshot("connection-labels-last-selected")
-	h.send("q")
+	h.quit()
 	if err := h.wait(5 * time.Second); err != nil {
 		t.Fatal(err)
 	}
