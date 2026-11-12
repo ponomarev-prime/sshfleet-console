@@ -148,7 +148,7 @@ path = %q
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	h.send("q")
+	h.quit()
 	if err := h.wait(5 * time.Second); err != nil {
 		t.Fatal(err)
 	}

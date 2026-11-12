@@ -94,7 +94,7 @@ type Model struct {
 	activeTab              int // 0 is the permanent Fleet tab; N maps to tabs[N-1].
 	tabSelectMode          bool
 	nextTabID              uint64
-	quitTabsConfirm        bool
+	quitConfirm            bool
 	quitAfterTabsClose     bool
 	targetStarting         bool
 	workspaceStarting      bool
@@ -735,6 +735,11 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		return m.applyGroupChanged(msg)
 
 	case tea.PasteMsg:
+		if m.quitConfirm {
+			m.quitConfirm = false
+			m.message = "Exit cancelled"
+			return m, nil
+		}
 		return m.handlePaste(msg)
 
 	case tea.MouseWheelMsg:
@@ -747,6 +752,21 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if m.quitConfirm {
+		if msg.Key().IsRepeat {
+			return m, nil
+		}
+		switch msg.String() {
+		case "q", "ctrl+c", "enter", "y":
+			return m.requestQuit()
+		default:
+			m.quitConfirm = false
+			m.message = "Exit cancelled"
+			if msg.String() == "esc" || msg.String() == "n" {
+				return m, nil
+			}
+		}
+	}
 	if m.tabSelectMode {
 		return m.handleTabSelectKey(msg)
 	}

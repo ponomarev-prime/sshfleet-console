@@ -97,7 +97,7 @@ func (m Model) openTerminalTab(cmd *exec.Cmd, hostIndex int, label string, inter
 	m.tabs = append(m.tabs, tab)
 	m.activeTab = len(m.tabs)
 	m.tabSelectMode = false
-	m.quitTabsConfirm = false
+	m.quitConfirm = false
 	width, height := m.fullTerminalDimensions()
 	return m, startTerminalTabCmd(tab.id, cmd, width, height, m.terminalScrollbackLines)
 }
@@ -248,7 +248,7 @@ func (m Model) applyTerminalTabClosed(msg terminalTabClosedMsg) (tea.Model, tea.
 	}
 	m.tabs = append(m.tabs[:index], m.tabs[index+1:]...)
 	m.activeTab = 0
-	m.quitTabsConfirm = false
+	m.quitConfirm = false
 	if m.quitAfterTabsClose && len(m.tabs) == 0 {
 		m.quitAfterTabsClose = false
 		return m, tea.Quit
@@ -280,7 +280,7 @@ func (m Model) handleTerminalTabKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		id, ptySession := tab.id, tab.session
 		m.tabs = append(m.tabs[:index], m.tabs[index+1:]...)
 		m.activeTab = 0
-		m.quitTabsConfirm = false
+		m.quitConfirm = false
 		m.message = "Terminal tab closed"
 		if ptySession == nil {
 			return m, nil
@@ -416,7 +416,7 @@ func (m Model) activateDirectTab(msg tea.KeyPressMsg) (Model, bool) {
 	}
 	m.activeTab = index
 	m.tabSelectMode = false
-	m.quitTabsConfirm = false
+	m.quitConfirm = false
 	if index == 0 {
 		m.message = "Fleet tab"
 	} else {
@@ -427,7 +427,7 @@ func (m Model) activateDirectTab(msg tea.KeyPressMsg) (Model, bool) {
 
 func (m Model) beginTabSelection() Model {
 	m.activeTab = 0
-	m.quitTabsConfirm = false
+	m.quitConfirm = false
 	if len(m.tabs) == 0 {
 		m.tabSelectMode = false
 		m.message = "Fleet tab · no terminal tabs are open"
@@ -448,7 +448,7 @@ func (m Model) handleTabSelectKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		m.activeTab = index
 		m.tabSelectMode = false
-		m.quitTabsConfirm = false
+		m.quitConfirm = false
 		if index == 0 {
 			m.message = "Fleet tab"
 		} else {
@@ -476,7 +476,7 @@ func (m Model) activateNextTab() Model {
 	if m.activeTab > len(m.tabs) {
 		m.activeTab = 0
 	}
-	m.quitTabsConfirm = false
+	m.quitConfirm = false
 	return m
 }
 
@@ -490,12 +490,18 @@ func (m Model) activatePreviousTab() Model {
 	if m.activeTab < 0 {
 		m.activeTab = len(m.tabs)
 	}
-	m.quitTabsConfirm = false
+	m.quitConfirm = false
 	return m
 }
 
 func (m Model) requestQuit() (tea.Model, tea.Cmd) {
 	m.tabSelectMode = false
+	if !m.quitConfirm {
+		m.quitConfirm = true
+		m.message = "Confirm exit · q/Enter/y yes · Esc/n cancel"
+		return m, nil
+	}
+	m.quitConfirm = false
 	live := false
 	for index := range m.tabs {
 		if m.tabs[index].session != nil || m.tabs[index].state == terminalTabStarting {
@@ -506,11 +512,6 @@ func (m Model) requestQuit() (tea.Model, tea.Cmd) {
 	if !live {
 		m.cancelBackground()
 		return m, tea.Quit
-	}
-	if !m.quitTabsConfirm {
-		m.quitTabsConfirm = true
-		m.message = "Live terminal tabs are open · q/Ctrl+C again closes them and quits"
-		return m, nil
 	}
 	m.quitAfterTabsClose = true
 	m.cancelBackground()

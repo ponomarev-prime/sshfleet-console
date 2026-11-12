@@ -104,6 +104,9 @@ func (m Model) View() tea.View {
 	if m.healthVisible {
 		content = m.overlayHealth(content, width, bodyHeight)
 	}
+	if m.quitConfirm {
+		content = m.overlayQuitPrompt(content, width, bodyHeight)
+	}
 
 	v := tea.NewView(m.renderTabStrip(width) + "\n" + content + "\n" + m.renderFooter(width))
 	v.AltScreen = true
@@ -1012,6 +1015,9 @@ func overlayBlock(base, popup string, x, y, width, height int) string {
 }
 
 func (m Model) renderFooter(width int) string {
+	if m.quitConfirm {
+		return statusStyle.Render(padRight(truncate(" Quit? q/Enter/y yes | Esc/n cancel ", width), width))
+	}
 	left := " Tab/h/l pane  j/k move  / search  e host  c config  ? health  Enter actions  q quit "
 	if m.tabSelectMode {
 		left = fmt.Sprintf(" TAB SELECT  1…%d choose  Esc cancel ", min(9, len(m.tabs)+1))
