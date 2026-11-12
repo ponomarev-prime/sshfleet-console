@@ -96,6 +96,9 @@ path = %q
 	h.waitForScreen("PREVIEW", 5*time.Second)
 	h.waitForScreen("[deploy @ 192.0.2.20]", 5*time.Second)
 	h.screenshot("connection-labels-narrow")
+	// G selects the last current row. Wait for the final startup sort rather
+	// than assuming discovery order already matches alphabetical order.
+	h.waitForScreenGone("Loading sources", 8*time.Second)
 	h.send("G")
 	h.waitForScreen("shell origin", 5*time.Second)
 	h.waitForScreen("[local]", 5*time.Second)
