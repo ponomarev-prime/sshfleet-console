@@ -273,6 +273,10 @@ func TestRegressionScriptAndDocsRequireBoundedGoStages(t *testing.T) {
 	if installFull < 0 || toolchainCheck < 0 || installFull > toolchainCheck {
 		t.Error("regression must prepare a fresh clone with install-full before checking the optional toolchain")
 	}
+	editorPTY := strings.Index(script, "run_step editor-pty env SSHF_REQUIRE_NVIM_E2E=1")
+	if editorPTY < 0 || editorPTY < toolchainCheck {
+		t.Error("full regression must require the real Neovim PTY scenario after preparing the toolchain")
+	}
 	for _, name := range []string{"README.md", filepath.Join("docs", "features.md")} {
 		body := strings.ToLower(readFile(t, filepath.Join(root, name)))
 		if !strings.Contains(body, "watchdog") || !strings.Contains(body, "stack trace") {
