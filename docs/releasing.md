@@ -24,6 +24,10 @@ archives, VERSION checksums, Linux arm64 packaging and the protected
 verify-to-publish workflow topology. The same suite is an explicit step of
 `make regression`, so its log and status remain in regression evidence.
 
+The real Neovim PTY scenario runs after the pinned companion toolchain is
+prepared. Full regression requires that editor instead of silently skipping
+its keyboard check; the test waits for Fleet startup readiness before editing.
+
 ## Repository model
 
 - This repository is `sshfleet-console`; it never publishes SSH Fleet Web or

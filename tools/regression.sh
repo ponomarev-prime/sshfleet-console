@@ -66,9 +66,9 @@ run_step menu go test -timeout=2m -v ./internal/ui -run 'TestHostActionMenu|Test
 run_step sources go test -timeout=2m -v ./internal/sourcebundle ./internal/inventory ./internal/config -count=1
 run_step pty-e2e go test -timeout=2m -v ./cmd/sshf -run TestTUIEndToEndProbeFilterOverlayGitAndQuit -count=1
 run_step pty-screenshots env SSHF_SCREENSHOT_DIR="$artifact_dir/tui-screenshots" go test -timeout=2m -v ./cmd/sshf -run 'TestTUIEndToEnd(ScreenshotsAndActionMenuTraversal|ComputedViews|GroupsCRUDAndMembership|LocalContainerMenuPreviewAndLogs|TrustedLocalConfigMenuAndPreview|GlobalHostSearchAcrossSources)' -count=1
-run_step editor-pty env SSHF_SCREENSHOT_DIR="$artifact_dir/tui-screenshots" go test -timeout=2m -v ./cmd/sshf -run TestTUIRealNeovimReceivesArrowKeys -count=1
 run_step install-full "$repo_root/tools/test-install-full.sh"
 run_step toolchain "$repo_root/tools/check.sh"
+run_step editor-pty env SSHF_REQUIRE_NVIM_E2E=1 SSHF_SCREENSHOT_DIR="$artifact_dir/tui-screenshots" go test -timeout=2m -v ./cmd/sshf -run TestTUIRealNeovimReceivesArrowKeys -count=1
 
 if [ "${SSHF_REGRESSION_DOCKER:-1}" = "1" ]; then
     if docker info >/dev/null 2>&1; then

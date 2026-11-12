@@ -333,6 +333,9 @@ func TestTUIRealNeovimReceivesArrowKeys(t *testing.T) {
 		var lookupErr error
 		nvim, lookupErr = exec.LookPath("nvim")
 		if lookupErr != nil {
+			if os.Getenv("SSHF_REQUIRE_NVIM_E2E") == "1" {
+				t.Fatal("Neovim is required for the full regression editor PTY scenario")
+			}
 			t.Skip("Neovim is unavailable; generic editor TTY transfer remains covered by the main PTY E2E")
 		}
 	}
@@ -372,6 +375,7 @@ host_column_percent = 30
 	h := newPTYHarness(t, command, terminal, 120, 30)
 	defer h.close()
 	h.waitForScreen("GROUPS", 8*time.Second)
+	h.waitForScreenGone("Loading sources", 8*time.Second)
 	h.send("c")
 	h.waitForScreen("host_column_percent", 8*time.Second)
 	h.send("\033[B")
